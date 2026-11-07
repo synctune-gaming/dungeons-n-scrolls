@@ -625,7 +625,7 @@
     .choice-buttons { margin-top: 14px; }
     .gesture-hint { margin-top: 13px; }
     .save-status { margin-top: 12px; }
-    .combat-active .scene-frame { height: 156px; }
+    .combat-active .scene-frame { height: 128px; }
     .combat-active .room-copy h2 { font-size: 25px; }
     .combat-active .room-copy { padding-top: 10px; padding-bottom: 10px; }
     .combat-status { margin-top: 7px; }
@@ -641,6 +641,8 @@
     .combat-active .mana-stat progress { margin-top: 3px; }
     .combat-active .adventure-header h1 { font-size: 25px; }
     .combat-active .floor-badge { min-height: 32px; }
+    .combat-active .floor-badge > span { font-size: 7px; line-height: 1; }
+    .combat-active .floor-badge strong { font-size: 16px; line-height: 1; margin-top: 1px; }
     .combat-active .spell-button { min-height: 56px; }
     .combat-active .choice-button { min-height: 68px; padding: 8px 4px; gap: 5px; }
   }

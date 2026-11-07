@@ -360,6 +360,8 @@ test('saves an unfinished fight with its health, mana, and conditions', async ({
 test('keeps every tactical choice and spell visible on a short phone', async ({ page, activate }) => {
   await page.setViewportSize({ width: 360, height: 664 })
   await beginBattle(page, activate)
+  await activate(page.getByRole('button', { name: 'Cast frost bind', exact: true }))
+  await expect(page.getByText('Held by frost', { exact: true })).toBeVisible()
   await page.evaluate(() => window.scrollTo(0, 0))
   for (const name of ['Strike', 'Guard', 'Dodge', 'Cast ember bolt', 'Cast frost bind', 'Cast storm lance', 'Cast arcane ward', 'Cast mending light', 'Drink aether vial']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 })
