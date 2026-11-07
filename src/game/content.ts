@@ -1,4 +1,4 @@
-import type { ClassId, Player, RelicId, Room, RoomId } from './types'
+import type { ClassId, DialogueResponse, Element, EnemyIntent, Player, RelicId, Room, RoomId, SpellId } from './types'
 
 export const CLASSES: Record<ClassId, {
   name: string
@@ -101,12 +101,12 @@ export const ROOMS: Record<RoomId, Room> = {
   'crypt-skulk': {
     id: 'crypt-skulk', kind: 'combat', name: 'Crypt skulk', zone: 'dungeon',
     description: 'A scrape of claws. Two hungry eyes. This little creature has no intention of letting you pass.',
-    enemy: { attack: 11, defense: 6, gold: 10, xp: 7 },
+    enemy: { health: 28, attack: 11, defense: 6, gold: 10, xp: 7, weakness: 'fire' },
   },
   'bone-sentry': {
     id: 'bone-sentry', kind: 'combat', name: 'Bone sentry', zone: 'dungeon',
     description: 'Its oath outlived its flesh. The sentry lifts a rusted blade and remembers what to do.',
-    enemy: { attack: 13, defense: 8, gold: 14, xp: 9 },
+    enemy: { health: 34, attack: 13, defense: 8, gold: 14, xp: 9, weakness: 'arcane' },
   },
   'lost-pilgrim': {
     id: 'lost-pilgrim', kind: 'npc', name: 'A fellow wanderer', zone: 'overworld',
@@ -127,7 +127,7 @@ export const ROOMS: Record<RoomId, Room> = {
   'hollow-king': {
     id: 'hollow-king', kind: 'boss', name: 'The Hollow King', zone: 'dungeon',
     description: 'A crown of thorns. A throne of bones. The king has been expecting a visitor.',
-    enemy: { attack: 24, defense: 13, gold: 45, xp: 18 },
+    enemy: { health: 66, attack: 24, defense: 13, gold: 45, xp: 18, weakness: 'frost' },
   },
   'cinder-stair': {
     id: 'cinder-stair', kind: 'passage', name: 'Beneath the embers', zone: 'overworld',
@@ -136,12 +136,12 @@ export const ROOMS: Record<RoomId, Room> = {
   'cinder-hound': {
     id: 'cinder-hound', kind: 'combat', name: 'Cinder hound', zone: 'dungeon',
     description: 'Sparks fall from its jaws. It circles once, then the whole corridor smells of smoke.',
-    enemy: { attack: 17, defense: 9, gold: 19, xp: 10 },
+    enemy: { health: 38, attack: 17, defense: 9, gold: 19, xp: 10, weakness: 'frost' },
   },
   'forge-guardian': {
     id: 'forge-guardian', kind: 'combat', name: 'Forge guardian', zone: 'dungeon',
     description: 'An abandoned suit of armor begins to move. There is no one inside. That is not reassuring.',
-    enemy: { attack: 19, defense: 11, gold: 22, xp: 11 },
+    enemy: { health: 42, attack: 19, defense: 11, gold: 22, xp: 11, weakness: 'frost' },
   },
   'forge-smith': {
     id: 'forge-smith', kind: 'npc', name: 'The last smith', zone: 'overworld',
@@ -162,7 +162,7 @@ export const ROOMS: Record<RoomId, Room> = {
   'cinder-drake': {
     id: 'cinder-drake', kind: 'boss', name: 'The Cinder Drake', zone: 'dungeon',
     description: 'The mountain takes a breath. Two wings unfold in the dark. Now you know what kept the forge warm.',
-    enemy: { attack: 30, defense: 16, gold: 70, xp: 24 },
+    enemy: { health: 84, attack: 30, defense: 16, gold: 70, xp: 24, weakness: 'frost' },
   },
   'pale-bridge': {
     id: 'pale-bridge', kind: 'passage', name: 'The pale crossing', zone: 'overworld',
@@ -171,12 +171,12 @@ export const ROOMS: Record<RoomId, Room> = {
   'veil-wraith': {
     id: 'veil-wraith', kind: 'combat', name: 'Veil wraith', zone: 'dungeon',
     description: 'A shape pulls itself from the mist. For a moment, it looks almost like someone you knew.',
-    enemy: { attack: 22, defense: 13, gold: 25, xp: 12 },
+    enemy: { health: 44, attack: 22, defense: 13, gold: 25, xp: 12, weakness: 'fire' },
   },
   'moon-knight': {
     id: 'moon-knight', kind: 'combat', name: 'Moon knight', zone: 'dungeon',
     description: 'Silver armor. A silent challenge. The knight bows before raising its sword.',
-    enemy: { attack: 24, defense: 15, gold: 29, xp: 13 },
+    enemy: { health: 48, attack: 24, defense: 15, gold: 29, xp: 13, weakness: 'arcane' },
   },
   'star-seer': {
     id: 'star-seer', kind: 'npc', name: 'The star reader', zone: 'overworld',
@@ -197,7 +197,7 @@ export const ROOMS: Record<RoomId, Room> = {
   'pale-warden': {
     id: 'pale-warden', kind: 'boss', name: 'The Pale Warden', zone: 'dungeon',
     description: 'At the end of every road, someone keeps the gate. This one has never let anyone leave.',
-    enemy: { attack: 35, defense: 19, gold: 100, xp: 30 },
+    enemy: { health: 100, attack: 35, defense: 19, gold: 100, xp: 30, weakness: 'fire' },
   },
 }
 
@@ -209,4 +209,76 @@ export const ROOM_LABELS: Record<Room['kind'], string> = {
   shop: 'Wandering shop',
   shrine: 'Safe haven',
   boss: 'Boss encounter',
+}
+
+export const SPELLS: Record<SpellId, {
+  name: string
+  shortName: string
+  cost: number
+  element: Element | null
+  description: string
+}> = {
+  'ember-bolt': { name: 'Ember bolt', shortName: 'Ember', cost: 6, element: 'fire', description: 'A bolt of hungry flame. Deals fire damage and burns for two more turns.' },
+  'frost-bind': { name: 'Frost bind', shortName: 'Frost', cost: 8, element: 'frost', description: 'Ice closes around your foe. Deals frost damage and freezes two enemy actions.' },
+  'storm-lance': { name: 'Storm lance', shortName: 'Storm', cost: 8, element: 'arcane', description: 'A spear of lightning. Heavy arcane damage that passes through a raised guard.' },
+  'arcane-ward': { name: 'Arcane ward', shortName: 'Ward', cost: 5, element: null, description: 'Weave a shield of light. It absorbs incoming damage until its strength runs out.' },
+  'mending-light': { name: 'Mending light', shortName: 'Mend', cost: 7, element: null, description: 'Trade a little magic for another chance. Restores health, but enemies still get their turn.' },
+}
+
+export const INTENTS: Record<EnemyIntent, { name: string; description: string; hint: string }> = {
+  lunge: { name: 'Quick lunge', description: 'It lowers its shoulder. A quick strike is coming.', hint: 'Guard to soften the blow, or dodge.' },
+  heavy: { name: 'Crushing blow', description: 'The weapon rises. This one will hurt.', hint: 'Dodge, freeze it, or put up a ward.' },
+  hex: { name: 'Hollow curse', description: 'A dark sigil gathers between its hands.', hint: 'Curses cannot be dodged. Guard or ward.' },
+  brace: { name: 'Raised guard', description: 'It braces behind its armor. Steel will struggle.', hint: 'Spells pass through its guard.' },
+  recover: { name: 'An opening', description: 'It falters. For one breath, you have the upper hand.', hint: 'A good moment to strike, mend, or recover mana.' },
+}
+
+interface BossPattern {
+  phases: readonly [string, string]
+  patterns: readonly [readonly EnemyIntent[], readonly EnemyIntent[]]
+  transition: string
+}
+
+const BOSS_PATTERNS: Partial<Record<RoomId, BossPattern>> = {
+  'hollow-king': { phases: ['Thronebound', 'Uncrowned'], patterns: [['lunge', 'brace', 'heavy'], ['heavy', 'hex', 'lunge', 'recover']], transition: 'The crown shatters. The Hollow King rises, no longer bound to his throne.' },
+  'cinder-drake': { phases: ['Sleeping ember', 'Wildfire'], patterns: [['lunge', 'heavy', 'brace'], ['hex', 'heavy', 'lunge', 'recover']], transition: 'Its wings ignite. The Cinder Drake tears free of the forge.' },
+  'pale-warden': { phases: ['Gatekeeper', 'Unbound'], patterns: [['brace', 'hex', 'lunge'], ['heavy', 'hex', 'recover', 'lunge']], transition: 'The mask breaks. Something ancient looks out through the Pale Warden.' },
+}
+
+export function getBossPattern(id: RoomId) {
+  const pattern = BOSS_PATTERNS[id]
+  if (!pattern) throw new Error(`No boss pattern exists for ${id}.`)
+  return pattern
+}
+
+export function getEnemyPattern(room: Room, phase: 1 | 2): readonly EnemyIntent[] {
+  if (room.kind === 'boss') return getBossPattern(room.id).patterns[phase === 1 ? 0 : 1]
+  if (room.kind !== 'combat') throw new Error('This room has no enemy intentions.')
+  if (room.enemy.weakness === 'arcane') return ['brace', 'lunge', 'hex', 'recover']
+  if (room.enemy.weakness === 'frost') return ['lunge', 'heavy', 'brace']
+  return ['lunge', 'heavy', 'recover']
+}
+
+interface Dialogue {
+  opening: string
+  clue: string
+  responses: Record<DialogueResponse, { label: string; hint: string }>
+}
+
+const responses: Dialogue['responses'] = {
+  rumor: { label: 'Ask what lies ahead', hint: '+1 wisdom. A clue, not a map.' },
+  rest: { label: 'Share the fire', hint: 'Restore health and 8 mana.' },
+  trade: { label: 'Ask for supplies', hint: 'A healing tonic for 20 gold.' },
+}
+
+const DIALOGUES: Partial<Record<RoomId, Dialogue>> = {
+  'lost-pilgrim': { opening: '"I heard a crown fall, once. It made no sound." The wanderer holds out a hand to the fire. "Sit a moment. The road will still be there."', clue: 'The wanderer whispers: "Cold hands can break an old crown. But mind what wakes beneath it." Your wisdom grows.', responses },
+  'forge-smith': { opening: '"Steel remembers the heat that shaped it." The smith looks toward the mountain. "Sometimes it remembers too much. What would you know?"', clue: 'The smith says: "When the wings catch fire, bind them with frost. The forge has a second heartbeat." Your wisdom grows.', responses },
+  'star-seer': { opening: '"The stars did not show me your ending." The old woman turns a card face down. "Perhaps that means you still get to choose."', clue: 'The seer murmurs: "A pale mask hides a darker face. Take a little fire to the last gate." Your wisdom grows.', responses },
+}
+
+export function getDialogue(id: RoomId) {
+  const dialogue = DIALOGUES[id]
+  if (!dialogue) throw new Error(`No conversation exists for ${id}.`)
+  return dialogue
 }

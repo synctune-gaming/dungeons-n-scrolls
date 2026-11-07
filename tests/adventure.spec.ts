@@ -36,7 +36,7 @@ async function enter(page: Page, room: RoomId = 'ashen-gate', player: Partial<Pl
   game.roomsCleared = game.roomIndex
   game.player = { ...game.player, ...player }
   const save: SavedGame = {
-    version: 1, game,
+    version: 2, game,
     settings: { sound: false, hints: true },
     records: { bestFloor: 1, wins: 0 },
   }

@@ -107,7 +107,7 @@ function Journal({ game, compact = false }: { game: GameState; compact?: boolean
 export default function App() {
   const [loaded] = useState(() => loadSave())
   const [save, setSave] = useState<SavedGame>(() => loaded.save ?? {
-    version: 1,
+    version: 2,
     game: createRun(randomSeed()),
     settings: { sound: false, hints: true },
     records: { bestFloor: 1, wins: 0 },

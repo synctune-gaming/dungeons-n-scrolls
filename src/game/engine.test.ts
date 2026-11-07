@@ -1,20 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { createRun, gameReducer, getChoices, getRoom } from './engine'
-import { loadSave, SAVE_KEY, writeSave } from './persistence'
+import { LEGACY_SAVE_KEY, loadSave, SAVE_KEY, writeSave } from './persistence'
 import { CLASS_IDS, savedGameSchema } from './types'
-import type { GameState, Player, RoomId, SavedGame } from './types'
+import type { GameState, LegacySavedGame, Player, RoomId, SavedGame } from './types'
 
 function encounter(id: RoomId, player: Partial<Player> = {}): GameState {
   const game = createRun(12345)
   return {
     ...game,
     deck: [id, 'ashen-gate'],
+    discovered: [id],
     player: { ...game.player, ...player },
   }
 }
 
 const choose = (game: GameState, direction: 'up' | 'left' | 'right' = 'up') =>
   gameReducer(game, { type: 'CHOOSE', direction })
+
+function winFight(game: GameState) {
+  let next = choose(game)
+  for (let turn = 0; turn < 30 && next.combat?.result === 'fighting'; turn += 1) next = choose(next)
+  expect(next.combat?.result).toBe('victory')
+  return next
+}
 
 describe('a replayable descent', () => {
   it('starts in the overworld with a complete adventurer and a boss at the end', () => {
@@ -49,15 +57,15 @@ describe('a replayable descent', () => {
   })
 })
 
-describe('quick combat and choices', () => {
-  it('resolves a fight in one gesture with health, gold, and experience changes', () => {
+describe('combat rewards and choices', () => {
+  it('awards health, gold, and experience changes only after winning the encounter', () => {
     const game = encounter('crypt-skulk')
-    const fought = choose(game)
-    expect(fought.roomIndex).toBe(1)
+    const fought = winFight(game)
+    expect(fought.roomIndex).toBe(0)
     expect(fought.player.health).toBeLessThan(game.player.health)
     expect(fought.player.gold).toBeGreaterThan(game.player.gold)
     expect(fought.player.xp + fought.player.level).toBeGreaterThan(1)
-    expect(fought.journal.at(-1)?.text).toContain('Crypt skulk')
+    expect(fought.journal.some((entry) => entry.text.includes('Crypt skulk defeated'))).toBe(true)
   })
 
   it('lets a dexterous adventurer sneak past without stealing combat rewards', () => {
@@ -78,7 +86,9 @@ describe('quick combat and choices', () => {
 
   it('allows talking and trading with strangers', () => {
     const game = encounter('lost-pilgrim')
-    expect(choose(game, 'left').player.gold).toBeGreaterThan(game.player.gold)
+    const conversation = choose(game, 'left')
+    expect(conversation.dialogue).toBe(true)
+    expect(gameReducer(conversation, { type: 'RESPOND_NPC', response: 'rumor' }).player.wisdom).toBeGreaterThan(game.player.wisdom)
     const traded = choose(game, 'right')
     expect(traded.player.gold).toBe(game.player.gold - 20)
     expect(traded.player.potions).toBe(game.player.potions + 1)
@@ -126,7 +136,8 @@ describe('quick combat and choices', () => {
 
   it('ends at zero health and prevents any further rewards', () => {
     const game = encounter('bone-sentry', { health: 1 })
-    const dead = choose(game)
+    let dead = choose(game)
+    for (let turn = 0; turn < 10 && dead.status === 'active'; turn += 1) dead = choose(dead)
     expect(dead.status).toBe('dead')
     expect(dead.player.health).toBe(0)
     expect(dead.player.gold).toBe(game.player.gold)
@@ -187,13 +198,13 @@ describe('bosses, progression, and victory', () => {
     const studied = choose(game, 'right')
     expect(studied.roomIndex).toBe(0)
     expect(studied.studied).toBe(true)
-    expect(studied.player.health).toBeLessThan(game.player.health)
+    expect(studied.player.mana).toBe(game.player.mana - 3)
     expect(choose(studied, 'right').player).toEqual(studied.player)
   })
 
   it('moves from the first boss into a new overworld region', () => {
-    const game = encounter('hollow-king', { strength: 30 })
-    const nextFloor = choose(game)
+    const game = encounter('hollow-king', { strength: 100 })
+    const nextFloor = choose(winFight(game))
     expect(nextFloor.floor).toBe(2)
     expect(nextFloor.roomIndex).toBe(0)
     expect(nextFloor.status).toBe('active')
@@ -202,8 +213,8 @@ describe('bosses, progression, and victory', () => {
   })
 
   it('wins only after the final boss and freezes the completed run', () => {
-    const game = { ...encounter('pale-warden', { strength: 30 }), floor: 3 }
-    const won = choose(game)
+    const game = { ...encounter('pale-warden', { strength: 100 }), floor: 3 }
+    const won = choose(winFight(game))
     expect(won.status).toBe('won')
     expect(won.puzzle).toBeNull()
     expect(choose(won)).toBe(won)
@@ -211,7 +222,7 @@ describe('bosses, progression, and victory', () => {
 
   it('levels up from experience with real stat and health improvements', () => {
     const game = encounter('crypt-skulk', { xp: 11 })
-    const fought = choose(game)
+    const fought = winFight(game)
     expect(fought.player.level).toBe(2)
     expect(fought.player.strength).toBeGreaterThan(game.player.strength)
     expect(fought.player.maxHealth).toBeGreaterThan(game.player.maxHealth)
@@ -220,7 +231,7 @@ describe('bosses, progression, and victory', () => {
 
 describe('saved adventures', () => {
   const save: SavedGame = {
-    version: 1,
+    version: 2,
     game: createRun(12345),
     settings: { sound: false, hints: true },
     records: { bestFloor: 1, wins: 0 },
@@ -263,13 +274,21 @@ describe('saved adventures', () => {
     for (const classId of CLASS_IDS) {
       for (let seed = 1; seed <= 30; seed += 1) {
         let game = createRun(seed, classId)
-        for (let step = 0; step < 80 && game.status === 'active'; step += 1) {
+        for (let step = 0; step < 160 && game.status === 'active'; step += 1) {
           if (game.puzzle) {
             const rune = game.puzzle.combination[game.puzzle.progress]
             if (!rune) throw new Error('The test run has an incomplete puzzle.')
             game = gameReducer(game, { type: 'PICK_RUNE', rune })
+          } else if (game.dialogue) {
+            game = gameReducer(game, { type: 'RESPOND_NPC', response: seed % 2 ? 'rumor' : 'rest' })
+          } else if (game.omen) {
+            game = gameReducer(game, { type: 'RESOLVE_OMEN', accept: seed % 2 === 0 })
+          } else if (game.combat?.result === 'victory') {
+            game = choose(game)
           } else if (game.player.health < game.player.maxHealth / 2 && game.player.potions > 0) {
             game = gameReducer(game, { type: 'DRINK_POTION' })
+          } else if (game.combat && game.player.mana >= 6 && step % 4 === 0) {
+            game = gameReducer(game, { type: 'CAST_SPELL', spell: 'ember-bolt' })
           } else {
             const choices = getChoices(game).filter((choice) => !choice.disabled)
             const choice = choices[(seed + step) % choices.length]
@@ -279,6 +298,60 @@ describe('saved adventures', () => {
           expect(savedGameSchema.safeParse({ ...save, game }).success).toBe(true)
         }
       }
+    }
+  })
+
+  it('migrates an existing adventure without losing its route, inventory, or records', () => {
+    const game = createRun(77)
+    const old: LegacySavedGame = {
+      version: 1,
+      settings: { sound: true, hints: false },
+      records: { bestFloor: 2, wins: 2 },
+      game: {
+        seed: game.seed, rng: game.rng, runNumber: 4, floor: 1,
+        deck: game.deck, roomIndex: game.deck.indexOf('crypt-skulk'),
+        roomsCleared: game.deck.indexOf('crypt-skulk'),
+        status: 'active', studied: false, puzzle: null, journal: game.journal,
+        player: {
+          classId: 'wanderer', health: 37, maxHealth: 86, strength: 9,
+          dexterity: 7, wisdom: 8, gold: 82, xp: 5, level: 2,
+          potions: 1, relics: ['fleet-feather'],
+        },
+      },
+    }
+    const values = new Map([[LEGACY_SAVE_KEY, JSON.stringify(old)]])
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value) },
+    }
+    const result = loadSave(storage)
+    expect(result.error).toBeNull()
+    expect(result.save?.version).toBe(2)
+    expect(result.save?.game.deck).toEqual(old.game.deck)
+    expect(result.save?.game.rng).toBe(old.game.rng)
+    expect(result.save?.game.player).toMatchObject(old.game.player)
+    expect(result.save?.game.player.mana).toBe(34)
+    expect(result.save?.game.player.aether).toBe(1)
+    expect(result.save?.game.discovered).toContain('crypt-skulk')
+    expect(result.save?.game.discovered).not.toContain('hollow-king')
+    expect(result.save?.records).toEqual(old.records)
+    if (!result.save) throw new Error('The legacy save did not migrate.')
+    expect(writeSave(result.save, storage)).toBeNull()
+    expect(values.has(LEGACY_SAVE_KEY)).toBe(true)
+    expect(values.has(SAVE_KEY)).toBe(true)
+  })
+
+  it('rejects impossible mana and mismatched combat states instead of loading them', () => {
+    const base = createRun(12345)
+    const index = base.deck.indexOf('crypt-skulk')
+    const fighting = choose({ ...base, roomIndex: index })
+    for (const invalid of [
+      { ...base, player: { ...base.player, mana: base.player.maxMana + 1 } },
+      { ...fighting, roomIndex: 0 },
+      { ...fighting, combat: { ...fighting.combat, result: 'victory', health: 20 } },
+      { ...base, discovered: [...base.discovered, 'pale-warden'] },
+    ]) {
+      expect(savedGameSchema.safeParse({ ...save, game: invalid }).success).toBe(false)
     }
   })
 })
