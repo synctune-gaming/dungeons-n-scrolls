@@ -268,9 +268,10 @@ function shrine(context: Context, palette: Palette) {
 function creature(context: Context, room: Room, palette: Palette, floor: number, phase: 1 | 2 = 1, heavy = false) {
   const boss = room.kind === 'boss'
   const armored = /sentry|guardian|knight/.test(room.id)
+  const size = boss ? (phase === 2 ? 1.35 : 1.25) : room.kind === 'combat' && room.enemy.tough ? 1.16 : 1
   context.save()
   context.translate(160, boss ? 177 : 181)
-  context.scale(boss ? (phase === 2 ? 1.35 : 1.25) : 1, boss ? (phase === 2 ? 1.35 : 1.25) : 1)
+  context.scale(size, size)
   const flesh = armored ? '#949287' : floor === 2 ? '#9f6349' : '#737b5a'
   glow(context, 0, 16, 48, boss ? '#c7785420' : '#bbaa7320')
   polygon(context, [[-43, 60], [-24, 41], [-24, 12], [-31, -12], [-20, -40], [17, -43], [33, -17], [24, 14], [27, 43], [44, 62]], palette.shadow)

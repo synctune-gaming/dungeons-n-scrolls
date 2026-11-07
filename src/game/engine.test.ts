@@ -3,6 +3,7 @@ import { createRun, gameReducer, getChoices, getRoom } from './engine'
 import { LEGACY_SAVE_KEY, loadSave, SAVE_KEY, writeSave } from './persistence'
 import { CLASS_IDS, savedGameSchema } from './types'
 import type { GameState, LegacySavedGame, Player, RoomId, SavedGame } from './types'
+import { createSocialState } from '../social/types'
 
 function encounter(id: RoomId, player: Partial<Player> = {}): GameState {
   const game = createRun(12345)
@@ -29,7 +30,7 @@ describe('a replayable descent', () => {
     const game = createRun(12345)
     expect(getRoom(game).zone).toBe('overworld')
     expect(game.player.health).toBe(game.player.maxHealth)
-    expect(game.deck).toHaveLength(8)
+    expect(game.deck).toHaveLength(12)
     expect(game.deck.at(-1)).toBe('hollow-king')
     expect(game.status).toBe('active')
   })
@@ -231,8 +232,9 @@ describe('bosses, progression, and victory', () => {
 
 describe('saved adventures', () => {
   const save: SavedGame = {
-    version: 2,
+    version: 3,
     game: createRun(12345),
+    social: createSocialState(),
     settings: { sound: false, hints: true },
     records: { bestFloor: 1, wins: 0 },
   }
@@ -303,14 +305,15 @@ describe('saved adventures', () => {
 
   it('migrates an existing adventure without losing its route, inventory, or records', () => {
     const game = createRun(77)
+    const deck = ['ashen-gate', 'lost-pilgrim', 'crypt-skulk', 'sealed-coffer', 'lantern-merchant', 'moon-well', 'bone-sentry', 'hollow-king'] as const
     const old: LegacySavedGame = {
       version: 1,
       settings: { sound: true, hints: false },
       records: { bestFloor: 2, wins: 2 },
       game: {
         seed: game.seed, rng: game.rng, runNumber: 4, floor: 1,
-        deck: game.deck, roomIndex: game.deck.indexOf('crypt-skulk'),
-        roomsCleared: game.deck.indexOf('crypt-skulk'),
+        deck: [...deck], roomIndex: deck.indexOf('crypt-skulk'),
+        roomsCleared: deck.indexOf('crypt-skulk'),
         status: 'active', studied: false, puzzle: null, journal: game.journal,
         player: {
           classId: 'wanderer', health: 37, maxHealth: 86, strength: 9,
@@ -326,7 +329,7 @@ describe('saved adventures', () => {
     }
     const result = loadSave(storage)
     expect(result.error).toBeNull()
-    expect(result.save?.version).toBe(2)
+    expect(result.save?.version).toBe(3)
     expect(result.save?.game.deck).toEqual(old.game.deck)
     expect(result.save?.game.rng).toBe(old.game.rng)
     expect(result.save?.game.player).toMatchObject(old.game.player)

@@ -5,6 +5,7 @@ import { createRun } from '../src/game/engine'
 import { ROOMS } from '../src/game/content'
 import { SAVE_KEY } from '../src/game/persistence'
 import type { Player, RoomId, SavedGame } from '../src/game/types'
+import { createSocialState } from '../src/social/types'
 
 const route: RoomId[] = [
   'ashen-gate', 'crypt-skulk', 'lost-pilgrim', 'sealed-coffer',
@@ -38,7 +39,7 @@ async function enter(page: Page, room: RoomId = 'ashen-gate', player: Partial<Pl
   game.discovered = route.slice(0, game.roomIndex + 1).filter((id) => ROOMS[id].kind !== 'combat' && ROOMS[id].kind !== 'boss')
   game.player = { ...game.player, ...player }
   const save: SavedGame = {
-    version: 2, game,
+    version: 3, game, social: createSocialState(),
     settings: { sound: false, hints: true },
     records: { bestFloor: 1, wins: 0 },
   }

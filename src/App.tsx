@@ -18,6 +18,7 @@ import { CLASS_IDS, INSCRIPTION_ROOM_IDS, SPELL_IDS } from './game/types'
 import type { ClassId, Direction, GameAction, GameState, RoomKind, Rune, SavedGame } from './game/types'
 import { useRoomGestures } from './useRoomGestures'
 import { useReducedMotion } from './useReducedMotion'
+import { createSocialState } from './social/types'
 
 type Panel = 'character' | 'inventory' | 'journal' | 'map' | 'help' | 'settings' | 'restart' | 'spells' | null
 
@@ -110,8 +111,9 @@ function Journal({ game, compact = false }: { game: GameState; compact?: boolean
 export default function App() {
   const [loaded] = useState(() => loadSave())
   const [save, setSave] = useState<SavedGame>(() => loaded.save ?? {
-    version: 2,
+    version: 3,
     game: createRun(randomSeed()),
+    social: createSocialState(),
     settings: { sound: false, hints: true },
     records: { bestFloor: 1, wins: 0 },
   })

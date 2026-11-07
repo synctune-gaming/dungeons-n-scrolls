@@ -1,6 +1,10 @@
 import { CLASSES, getBossPattern, getDialogue, getEnemyPattern, getRegion, INTENTS, RELICS, ROOMS, SPELLS } from './content'
-import { INSCRIPTION_ROOM_IDS, RELIC_IDS } from './types'
-import type { Choice, ClassId, Combat, EffectType, GameAction, GameState, RelicId, RoomId, SpellId } from './types'
+import { GIFTS } from '../social/content'
+import type { AdventurerId, GiftId } from '../social/types'
+import { INSCRIPTION_ROOM_IDS, NPC_ROOM_IDS, RELIC_IDS } from './types'
+import type { Choice, ClassId, Combat, DialogueResponse, EffectType, GameAction, GameState, NpcRoomId, RelicId, RoomId, SpellId } from './types'
+import { DESTINATIONS, SIDE_TRIP_INTERVAL } from './world'
+import type { DestinationId } from './world'
 
 function random(rng: number): [number, number] {
   const next = (rng + 0x6d2b79f5) >>> 0
@@ -42,6 +46,8 @@ export function createRun(seed: number, classId: ClassId = 'wanderer', runNumber
     seed: normalizedSeed, rng, runNumber, floor: 1, roomIndex: 0, deck,
     status: 'active', roomsCleared: 0, studied: false, puzzle: null,
     discovered: ['ashen-gate'], searched: [], combat: null, dialogue: false, omen: null,
+    history: [], lastSideTripAt: 0, visit: null, npcRewards: [], worldExplored: [],
+    giftReturns: [], giftClaims: [],
     feedback: { id: 0, type: 'travel', actionType: 'travel', enemyDamage: 0, playerDamage: 0, healing: 0, text: 'Your story begins.' },
     player: {
       classId, ...stats, health: stats.maxHealth,
@@ -146,7 +152,13 @@ function equipRelic(game: GameState, id: RelicId): GameState {
 
 function advance(game: GameState): GameState {
   if (game.status !== 'active') return game
-  const next: GameState = { ...game, roomsCleared: game.roomsCleared + 1, puzzle: null, studied: false, combat: null, dialogue: false, omen: null }
+  const room = getRoom(game)
+  const outcome = game.combat?.result === 'victory' ? 'victory'
+    : game.combat ? 'retreated' : room.kind === 'combat' || room.kind === 'boss' ? 'passed' : 'explored'
+  const next: GameState = {
+    ...game, roomsCleared: game.roomsCleared + 1, puzzle: null, studied: false, combat: null, dialogue: false, omen: null,
+    history: [...game.history, { roomId: room.id, floor: game.floor, known: getRoomPresentation(game).known, outcome, sequence: game.roomsCleared }],
+  }
   if (getRoom(game).kind === 'boss') {
     if (game.floor === 3) {
       return log({ ...next, status: 'won' }, 'The final gate opens. You made it out, with a story worth telling.', 'good')
@@ -167,8 +179,8 @@ function advance(game: GameState): GameState {
   const roomIndex = game.roomIndex + 1
   const id = game.deck[roomIndex]
   if (!id) throw new Error('The next room is missing from the route.')
-  const room = ROOMS[id]
-  const discovered = room.kind !== 'combat' && room.kind !== 'boss' && !next.discovered.includes(id)
+  const nextRoom = ROOMS[id]
+  const discovered = nextRoom.kind !== 'combat' && nextRoom.kind !== 'boss' && !next.discovered.includes(id)
     ? [...next.discovered, id] : next.discovered
   return { ...next, roomIndex, discovered }
 }
@@ -327,7 +339,7 @@ function attack(game: GameState): GameState {
 
 export function spellUnavailable(game: GameState, spell: SpellId): string | null {
   if (game.status !== 'active') return 'This adventure has ended.'
-  if (game.puzzle || game.dialogue || game.omen) return 'Finish this interaction first.'
+  if (game.puzzle || game.dialogue || game.omen || game.visit) return 'Finish this interaction first.'
   const active = game.combat?.result === 'fighting'
   if (spell !== 'mending-light' && !active) return 'Find a foe before casting this spell.'
   if (spell === 'mending-light' && game.player.health === game.player.maxHealth) return 'You are already at full health.'
@@ -458,24 +470,125 @@ export function getChoices(game: GameState): Choice[] {
   }
 }
 
+export function sideTripRemaining(game: GameState): number {
+  return Math.max(0, SIDE_TRIP_INTERVAL - (game.roomsCleared - game.lastSideTripAt))
+}
+
+export function visitUnavailable(game: GameState, id: DestinationId): string | null {
+  if (game.status !== 'active') return 'Start a new adventure before taking a side trip.'
+  if (game.visit) return 'Finish your current side trip first.'
+  if (game.combat) return 'Finish the current fight and continue before visiting.'
+  if (game.puzzle || game.dialogue || game.omen) return 'Finish this interaction before visiting.'
+  if (DESTINATIONS[id].floor > game.floor) return 'Reach the next region to visit this destination.'
+  const remaining = sideTripRemaining(game)
+  return remaining > 0 ? `Complete ${remaining} more room${remaining === 1 ? '' : 's'} before your next side trip.` : null
+}
+
+export function getVisitedDestination(game: GameState) {
+  return game.visit ? DESTINATIONS[game.visit.venueId ?? game.visit.destinationId] : null
+}
+
+export function npcResponseUnavailable(game: GameState, id: NpcRoomId, response: DialogueResponse): string | null {
+  if (response !== 'trade' && game.npcRewards.includes(id)) return 'You already received this traveler\'s help in this run.'
+  if (response === 'trade' && game.player.gold < 20) return 'You need 20 gold for the offered supplies.'
+  if (response === 'trade' && game.player.potions >= 1000) return 'Your satchel cannot hold another tonic.'
+  return null
+}
+
+function respondToNpc(game: GameState, id: NpcRoomId, response: DialogueResponse): GameState {
+  if (response === 'trade') {
+    return log(restoreMana({ ...game, player: { ...game.player, gold: game.player.gold - 20, potions: game.player.potions + 1 } }, 4), 'The stranger leaves you a tonic and a little magic for the road. -20 gold.', 'good')
+  }
+  const next = { ...game, npcRewards: [...game.npcRewards, id] }
+  if (response === 'rumor') return gainXp(log(gainWisdom(next), getDialogue(id).clue, 'good'), 4)
+  return gainXp(log(restoreMana(heal(next, 12 + game.player.wisdom), 8), 'A shared fire, a quieter heart. Your wounds and magic recover.', 'good'), 4)
+}
+
+export type ShopItem = 'tonic' | 'aether' | 'iron-charm'
+export function purchaseUnavailable(game: GameState, item: ShopItem): string | null {
+  const price = item === 'tonic' ? 15 : item === 'aether' ? 12 : 30
+  if (item === 'iron-charm' && game.player.relics.includes('iron-charm')) return 'Your iron charm is already equipped.'
+  if (game.player.gold < price) return `You need ${price} gold for ${item === 'tonic' ? 'a healing tonic' : item === 'aether' ? 'an aether vial' : 'the iron charm'}.`
+  if ((item === 'tonic' && game.player.potions >= 1000) || (item === 'aether' && game.player.aether >= 1000)) return `Your satchel cannot hold another ${item === 'tonic' ? 'tonic' : 'aether vial'}.`
+  return null
+}
+
+function purchase(game: GameState, item: ShopItem): GameState {
+  const reason = purchaseUnavailable(game, item)
+  if (reason) return log(game, reason, 'danger')
+  if (item === 'tonic') return log({ ...game, player: { ...game.player, gold: game.player.gold - 15, potions: game.player.potions + 1 } }, 'Healing tonic purchased. -15 gold, +1 tonic.', 'good')
+  if (item === 'aether') return log({ ...game, player: { ...game.player, gold: game.player.gold - 12, aether: game.player.aether + 1 } }, 'Aether vial purchased. -12 gold, +1 vial.', 'good')
+  return log(equipRelic({ ...game, player: { ...game.player, gold: game.player.gold - 30 } }, 'iron-charm'), 'Iron charm equipped. -30 gold, +8 max health, +2 armor.', 'good')
+}
+
+export function giftUnavailable(game: GameState, adventurerId: AdventurerId, giftId: GiftId): string | null {
+  if (game.status !== 'active') return 'Start a new adventure to receive more gifts.'
+  if (game.combat) return 'Finish the current fight and continue before claiming a gift.'
+  if (game.puzzle || game.dialogue || game.omen || game.visit) return 'Finish this interaction before claiming a gift.'
+  if (!game.giftReturns.includes(adventurerId)) return 'There is no pending return gift from this adventurer.'
+  if (game.giftClaims.includes(adventurerId)) return 'You already claimed this return gift.'
+  if (game.giftClaims.length >= 3) return 'You already received three gift boosts in this run.'
+  const gift = GIFTS[giftId]
+  if (gift.health && game.player.health === game.player.maxHealth) return 'You are at full health. Save this gift for later.'
+  if (gift.mana && game.player.mana === game.player.maxMana) return 'You are at full mana. Save this gift for later.'
+  if (gift.strength && game.player.strength === 100) return 'Your strength is already at its limit.'
+  return null
+}
+
 function resolveAction(game: GameState, action: GameAction): GameState {
+  if (action.type === 'START_VISIT') {
+    const reason = visitUnavailable(game, action.destinationId)
+    if (reason) return log(game, reason, 'danger')
+    return log({ ...game, visit: { destinationId: action.destinationId, venueId: null }, lastSideTripAt: game.roomsCleared }, `You take a side trip to ${DESTINATIONS[action.destinationId].name}. Your dungeon encounter waits for you.`)
+  }
+  if (action.type === 'END_VISIT') return game.visit ? log({ ...game, visit: null }, 'You return to the same place in your adventure.') : log(game, 'There is no side trip to leave.')
+  if (action.type === 'VISIT_VENUE') {
+    const visit = game.visit
+    if (!visit || !DESTINATIONS[visit.destinationId].venues.includes(action.destinationId)) return log(game, 'That venue is not part of this side trip.', 'danger')
+    return log({ ...game, visit: { ...visit, venueId: action.destinationId } }, `You enter ${DESTINATIONS[action.destinationId].name}.`)
+  }
+  if (action.type === 'RETURN_TO_CITY') {
+    if (!game.visit || DESTINATIONS[game.visit.destinationId].kind !== 'city') return log(game, 'This side trip has no city square.', 'danger')
+    return { ...game, visit: { ...game.visit, venueId: null } }
+  }
+  if (action.type === 'EXPLORE_CITY') {
+    const destination = getVisitedDestination(game)
+    if (!destination || destination.kind !== 'city') return log(game, 'Enter a city before exploring its streets.', 'danger')
+    if (game.worldExplored.includes(destination.id)) return log(game, 'You already charted these streets in this run.')
+    return gainXp(log({ ...game, worldExplored: [...game.worldExplored, destination.id] }, destination.discovery, 'good'), 2)
+  }
+  if (action.type === 'VISIT_RESPONSE') {
+    const destination = getVisitedDestination(game)
+    const id = NPC_ROOM_IDS.find((roomId) => roomId === destination?.roomId)
+    if (destination?.kind !== 'npc' || !id) return log(game, 'Visit a traveler before choosing a response.', 'danger')
+    const reason = npcResponseUnavailable(game, id, action.response)
+    return reason ? log(game, reason, 'danger') : respondToNpc(game, id, action.response)
+  }
+  if (action.type === 'VISIT_BUY') {
+    if (getVisitedDestination(game)?.kind !== 'shop') return log(game, 'Visit a merchant before buying supplies.', 'danger')
+    return purchase(game, action.item)
+  }
+  if (action.type === 'RECEIVE_GIFT') {
+    const reason = giftUnavailable(game, action.adventurerId, action.giftId)
+    if (reason) return log(game, reason, 'danger')
+    const gift = GIFTS[action.giftId]
+    const next = restoreMana(heal(game, gift.health), gift.mana)
+    return log({
+      ...next, giftClaims: [...game.giftClaims, action.adventurerId],
+      player: { ...next.player, strength: Math.min(100, next.player.strength + gift.strength) },
+    }, `${gift.name} claimed. ${gift.effect}. Gift boost ${game.giftClaims.length + 1} of 3 for this run.`, 'good')
+  }
   if (game.status !== 'active') return game
+  if (game.visit) return log(game, 'Return from your side trip before continuing the dungeon.', 'danger')
   if (action.type === 'CLOSE_PUZZLE') return game.puzzle ? { ...game, puzzle: null } : game
   if (action.type === 'CLOSE_DIALOGUE') return game.dialogue ? { ...game, dialogue: false } : game
   if (action.type === 'RESPOND_NPC') {
     if (!game.dialogue) return game
-    let next: GameState = { ...game, dialogue: false }
-    if (action.response === 'rumor') {
-      next = gainWisdom(next)
-      return advance(gainXp(log(next, getDialogue(getRoom(game).id).clue, 'good'), 4))
-    }
-    if (action.response === 'rest') {
-      return advance(gainXp(log(restoreMana(heal(next, 12 + game.player.wisdom), 8), 'A shared fire, a quieter heart. Your wounds and magic recover.', 'good'), 4))
-    }
-    if (game.player.gold < 20) return log(game, 'You need 20 gold for the offered supplies.', 'danger')
-    if (game.player.potions >= 1000) return log(game, 'Your satchel cannot hold another tonic.', 'danger')
-    next = restoreMana({ ...next, player: { ...next.player, gold: next.player.gold - 20, potions: next.player.potions + 1 } }, 4)
-    return advance(log(next, 'The stranger leaves you a tonic and a little magic for the road. -20 gold.', 'good'))
+    const id = NPC_ROOM_IDS.find((roomId) => roomId === getRoom(game).id)
+    if (!id) throw new Error('The current conversation has no traveler.')
+    const reason = npcResponseUnavailable(game, id, action.response)
+    if (reason) return log(game, reason, 'danger')
+    return advance(respondToNpc({ ...game, dialogue: false }, id, action.response))
   }
   if (action.type === 'RESOLVE_OMEN') {
     const omen = game.omen
@@ -525,9 +638,7 @@ function resolveAction(game: GameState, action: GameAction): GameState {
   if (action.type === 'STUDY_ENEMY') return studyEnemy(game)
   if (action.type === 'BUY_AETHER') {
     if (getRoom(game).kind !== 'shop') return log(game, 'Aether vials are sold by merchants.', 'danger')
-    if (game.player.gold < 12) return log(game, 'You need 12 gold for an aether vial.', 'danger')
-    if (game.player.aether >= 1000) return log(game, 'Your satchel cannot hold another aether vial.', 'danger')
-    return log({ ...game, player: { ...game.player, gold: game.player.gold - 12, aether: game.player.aether + 1 } }, 'Aether vial purchased. -12 gold, +1 vial.', 'good')
+    return purchase(game, 'aether')
   }
   if (action.type === 'INSPECT_INSCRIPTION') {
     const roomId = INSCRIPTION_ROOM_IDS.find((id) => id === getRoom(game).id)
@@ -604,14 +715,7 @@ function resolveAction(game: GameState, action: GameAction): GameState {
     }
     case 'shop': {
       if (direction === 'up') return advance(log(game, 'You leave the lantern glow and follow the path.'))
-      if (direction === 'left') {
-        if (game.player.gold < 15) return log(game, 'You need 15 gold to buy a healing tonic.', 'danger')
-        if (game.player.potions >= 1000) return log(game, 'Your satchel cannot hold another tonic.', 'danger')
-        return log({ ...game, player: { ...game.player, gold: game.player.gold - 15, potions: game.player.potions + 1 } }, 'Healing tonic purchased. -15 gold, +1 tonic.', 'good')
-      }
-      if (game.player.relics.includes('iron-charm')) return log(game, 'Your iron charm is already equipped.')
-      if (game.player.gold < 30) return log(game, 'You need 30 gold to buy the iron charm.', 'danger')
-      return log(equipRelic({ ...game, player: { ...game.player, gold: game.player.gold - 30 } }, 'iron-charm'), 'Iron charm equipped. -30 gold, +8 max health, +2 armor.', 'good')
+      return purchase(game, direction === 'left' ? 'tonic' : 'iron-charm')
     }
     case 'shrine': {
       if (direction === 'left') {

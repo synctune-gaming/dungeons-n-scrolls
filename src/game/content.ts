@@ -1,4 +1,5 @@
 import type { ClassId, DialogueResponse, Element, EnemyIntent, Player, RelicId, Room, RoomId, SpellId } from './types'
+import { REGION_ROOM_IDS } from './types'
 
 export const CLASSES: Record<ClassId, {
   name: string
@@ -58,10 +59,7 @@ export const REGIONS: {
     dungeon: 'The Sunken Keep',
     subtitle: 'An old road. A forgotten kingdom.',
     boss: 'hollow-king',
-    rooms: [
-      'ashen-gate', 'crypt-skulk', 'bone-sentry', 'lost-pilgrim',
-      'sealed-coffer', 'lantern-merchant', 'moon-well', 'hollow-king',
-    ],
+    rooms: [...REGION_ROOM_IDS[0]],
   },
   {
     floor: 2,
@@ -69,10 +67,7 @@ export const REGIONS: {
     dungeon: 'The Cinderworks',
     subtitle: 'Something still stirs beneath the forge.',
     boss: 'cinder-drake',
-    rooms: [
-      'cinder-stair', 'cinder-hound', 'forge-guardian', 'forge-smith',
-      'ember-coffer', 'ash-merchant', 'ember-shrine', 'cinder-drake',
-    ],
+    rooms: [...REGION_ROOM_IDS[1]],
   },
   {
     floor: 3,
@@ -80,10 +75,7 @@ export const REGIONS: {
     dungeon: 'The Pale Sanctum',
     subtitle: 'The last light is not always a friendly one.',
     boss: 'pale-warden',
-    rooms: [
-      'pale-bridge', 'veil-wraith', 'moon-knight', 'star-seer',
-      'ivory-coffer', 'veil-merchant', 'star-well', 'pale-warden',
-    ],
+    rooms: [...REGION_ROOM_IDS[2]],
   },
 ]
 
@@ -198,6 +190,60 @@ export const ROOMS: Record<RoomId, Room> = {
     id: 'pale-warden', kind: 'boss', name: 'The Pale Warden', zone: 'dungeon',
     description: 'At the end of every road, someone keeps the gate. This one has never let anyone leave.',
     enemy: { health: 100, attack: 35, defense: 19, gold: 100, xp: 30, weakness: 'fire' },
+  },
+  'moss-trail': {
+    id: 'moss-trail', kind: 'passage', name: 'The rootbound road', zone: 'overworld',
+    description: 'Roots cross the stones like old handwriting. The road bends toward a distant lantern.',
+  },
+  'moss-crawler': {
+    id: 'moss-crawler', kind: 'combat', name: 'Moss crawler', zone: 'overworld',
+    description: 'A small creature unfolds from the green. Quick claws, but little armor.',
+    enemy: { health: 18, attack: 8, defense: 3, gold: 8, xp: 5, weakness: 'fire' },
+  },
+  'grave-brute': {
+    id: 'grave-brute', kind: 'combat', name: 'Grave brute', zone: 'dungeon',
+    description: 'It drags a stone maul across the floor. This one will not fall to a careless strike.',
+    enemy: { health: 58, attack: 15, defense: 10, gold: 24, xp: 12, weakness: 'frost', tough: true },
+  },
+  'moss-camp': {
+    id: 'moss-camp', kind: 'shrine', name: 'A fire beneath the roots', zone: 'overworld',
+    description: 'Someone left the coals warm and the kettle full. A quiet stop on a longer road.',
+  },
+  'ash-trail': {
+    id: 'ash-trail', kind: 'passage', name: 'The cooling road', zone: 'overworld',
+    description: 'A ribbon of pale ash runs between the rocks. Far below, the forge bells still answer.',
+  },
+  'coal-imp': {
+    id: 'coal-imp', kind: 'combat', name: 'Coal imp', zone: 'dungeon',
+    description: 'A bright little nuisance skips between the coals, stealing sparks from your lantern.',
+    enemy: { health: 24, attack: 12, defense: 5, gold: 12, xp: 6, weakness: 'fire' },
+  },
+  'slag-sentry': {
+    id: 'slag-sentry', kind: 'combat', name: 'Slag sentry', zone: 'dungeon',
+    description: 'Layers of cooled iron cling to its frame. Wait for an opening, or let a spell find one.',
+    enemy: { health: 72, attack: 20, defense: 13, gold: 34, xp: 16, weakness: 'arcane', tough: true },
+  },
+  'ember-camp': {
+    id: 'ember-camp', kind: 'shrine', name: 'The sheltered coals', zone: 'overworld',
+    description: 'The wind cannot reach this little fire. Set down your pack and let the road wait.',
+  },
+  'mist-trail': {
+    id: 'mist-trail', kind: 'passage', name: 'The lamplit causeway', zone: 'overworld',
+    description: 'Small lamps line the white stones. Their reflections are the only map through the mist.',
+  },
+  'mist-skulk': {
+    id: 'mist-skulk', kind: 'combat', name: 'Mist skulk', zone: 'overworld',
+    description: 'It darts between the lamps. A quick foe, lighter than the shadows around it.',
+    enemy: { health: 30, attack: 15, defense: 8, gold: 18, xp: 8, weakness: 'arcane' },
+  },
+  'oath-knight': {
+    id: 'oath-knight', kind: 'combat', name: 'Oath knight', zone: 'dungeon',
+    description: 'A second oath, a heavier blade. Its patient guard asks for more than a single answer.',
+    enemy: { health: 86, attack: 23, defense: 16, gold: 45, xp: 20, weakness: 'frost', tough: true },
+  },
+  'star-camp': {
+    id: 'star-camp', kind: 'shrine', name: 'A last shared lantern', zone: 'overworld',
+    description: 'The stars arrive one by one. Beside the fire, there is still room for another traveler.',
   },
 }
 

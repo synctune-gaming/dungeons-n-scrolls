@@ -1,6 +1,10 @@
 import { z } from 'zod'
+import { ADVENTURER_IDS, socialStateSchema } from '../social/types'
+import type { AdventurerId, GiftId } from '../social/types'
+import { DESTINATIONS, DESTINATION_IDS } from './world'
+import type { DestinationId } from './world'
 
-export const ROOM_IDS = [
+const LEGACY_ROOM_IDS = [
   'ashen-gate', 'crypt-skulk', 'bone-sentry', 'lost-pilgrim',
   'sealed-coffer', 'lantern-merchant', 'moon-well', 'hollow-king',
   'cinder-stair', 'cinder-hound', 'forge-guardian', 'forge-smith',
@@ -9,6 +13,12 @@ export const ROOM_IDS = [
   'ivory-coffer', 'veil-merchant', 'star-well', 'pale-warden',
 ] as const
 
+export const REGION_ROOM_IDS = [
+  ['ashen-gate', 'crypt-skulk', 'bone-sentry', 'lost-pilgrim', 'sealed-coffer', 'lantern-merchant', 'moon-well', 'moss-trail', 'moss-crawler', 'grave-brute', 'moss-camp', 'hollow-king'],
+  ['cinder-stair', 'cinder-hound', 'forge-guardian', 'forge-smith', 'ember-coffer', 'ash-merchant', 'ember-shrine', 'ash-trail', 'coal-imp', 'slag-sentry', 'ember-camp', 'cinder-drake'],
+  ['pale-bridge', 'veil-wraith', 'moon-knight', 'star-seer', 'ivory-coffer', 'veil-merchant', 'star-well', 'mist-trail', 'mist-skulk', 'oath-knight', 'star-camp', 'pale-warden'],
+] as const
+export const ROOM_IDS = [...REGION_ROOM_IDS[0], ...REGION_ROOM_IDS[1], ...REGION_ROOM_IDS[2]] as const
 export type RoomId = typeof ROOM_IDS[number]
 export const CLASS_IDS = ['wanderer', 'shade', 'ironbound'] as const
 export const RELIC_IDS = ['iron-charm', 'fleet-feather', 'ember-stone'] as const
@@ -26,11 +36,14 @@ export type EffectType = typeof EFFECT_IDS[number]
 export type Element = 'fire' | 'frost' | 'arcane'
 export type DialogueResponse = 'rumor' | 'rest' | 'trade'
 
-export const BATTLE_ROOM_IDS = [
+const LEGACY_BATTLE_ROOM_IDS = [
   'crypt-skulk', 'bone-sentry', 'hollow-king', 'cinder-hound', 'forge-guardian',
   'cinder-drake', 'veil-wraith', 'moon-knight', 'pale-warden',
 ] as const
+export const BATTLE_ROOM_IDS = [...LEGACY_BATTLE_ROOM_IDS, 'moss-crawler', 'grave-brute', 'coal-imp', 'slag-sentry', 'mist-skulk', 'oath-knight'] as const
 export type BattleRoomId = typeof BATTLE_ROOM_IDS[number]
+export const NPC_ROOM_IDS = ['lost-pilgrim', 'forge-smith', 'star-seer'] as const
+export type NpcRoomId = typeof NPC_ROOM_IDS[number]
 export const INSCRIPTION_ROOM_IDS = [
   'ashen-gate', 'sealed-coffer', 'moon-well', 'cinder-stair', 'ember-coffer',
   'ember-shrine', 'pale-bridge', 'ivory-coffer', 'star-well',
@@ -44,7 +57,7 @@ interface RoomBase {
 }
 
 export type Room = RoomBase & (
-  | { id: BattleRoomId; kind: 'combat' | 'boss'; enemy: { health: number; attack: number; defense: number; gold: number; xp: number; weakness: Element } }
+  | { id: BattleRoomId; kind: 'combat' | 'boss'; enemy: { health: number; attack: number; defense: number; gold: number; xp: number; weakness: Element; tough?: boolean } }
   | { kind: Exclude<RoomKind, 'combat' | 'boss'> }
 )
 
@@ -83,7 +96,7 @@ const baseGameSchema = z.object({
   runNumber: integer(1),
   floor: integer(1, 3),
   roomIndex: integer(0, 7),
-  deck: z.array(z.enum(ROOM_IDS)).min(1).max(8),
+  deck: z.array(z.enum(LEGACY_ROOM_IDS)).min(1).max(8),
   status: z.enum(['active', 'dead', 'won']),
   player: legacyPlayerSchema,
   roomsCleared: integer(0, 24),
@@ -100,9 +113,13 @@ const baseGameSchema = z.object({
   }).strict()).min(1).max(30),
 }).strict()
 
-function validateCommon(game: z.infer<typeof baseGameSchema>, context: z.RefinementCtx) {
+type CommonGame = Omit<z.infer<typeof baseGameSchema>, 'deck'> & { deck: RoomId[] }
+
+function validateCommon(game: CommonGame, context: z.RefinementCtx, expanded = false) {
   const expectedBoss = ['hollow-king', 'cinder-drake', 'pale-warden'][game.floor - 1]
-  const regionIds = ROOM_IDS.slice((game.floor - 1) * 8, game.floor * 8)
+  const regionIds: readonly string[] = expanded
+    ? REGION_ROOM_IDS[game.floor - 1] ?? []
+    : LEGACY_ROOM_IDS.slice((game.floor - 1) * 8, game.floor * 8)
   const valid = game.roomIndex < game.deck.length
     && game.player.health <= game.player.maxHealth
     && new Set(game.player.relics).size === game.player.relics.length
@@ -122,7 +139,7 @@ function validateCommon(game: z.infer<typeof baseGameSchema>, context: z.Refinem
   }
 }
 
-const legacyGameSchema = baseGameSchema.superRefine(validateCommon)
+const legacyGameSchema = baseGameSchema.superRefine((game, context) => validateCommon(game, context))
 
 const combatSchema = z.object({
   roomId: z.enum(BATTLE_ROOM_IDS),
@@ -149,21 +166,26 @@ const feedbackSchema = z.object({
   text: z.string().max(500),
 }).strict()
 
-const gameSchema = baseGameSchema.extend({
+const versionTwoGameFields = baseGameSchema.extend({
   player: playerSchema,
-  discovered: z.array(z.enum(ROOM_IDS)).max(24),
+  discovered: z.array(z.enum(LEGACY_ROOM_IDS)).max(24),
   searched: z.array(z.enum(INSCRIPTION_ROOM_IDS)).max(9),
-  combat: combatSchema.nullable(),
+  combat: combatSchema.extend({ roomId: z.enum(LEGACY_BATTLE_ROOM_IDS) }).nullable(),
   dialogue: z.boolean(),
   omen: z.object({
     roomId: z.enum(INSCRIPTION_ROOM_IDS),
     outcome: integer(0, 2),
   }).strict().nullable(),
   feedback: feedbackSchema,
-}).strict().superRefine((game, context) => {
-  validateCommon(game, context)
+}).strict()
+
+type EncounterGame = Omit<z.infer<typeof versionTwoGameFields>, 'deck' | 'discovered' | 'combat'>
+  & { deck: RoomId[]; discovered: RoomId[]; combat: z.infer<typeof combatSchema> | null }
+
+function validateEncounter(game: EncounterGame, context: z.RefinementCtx, expanded = false) {
+  validateCommon(game, context, expanded)
   const id = game.deck[game.roomIndex]
-  const allowed = ROOM_IDS.slice(0, game.floor * 8)
+  const allowed: readonly string[] = expanded ? REGION_ROOM_IDS.slice(0, game.floor).flat() : LEGACY_ROOM_IDS.slice(0, game.floor * 8)
   const interactions = Number(Boolean(game.puzzle)) + Number(Boolean(game.combat))
     + Number(game.dialogue) + Number(Boolean(game.omen))
   const valid = game.player.mana <= game.player.maxMana
@@ -173,7 +195,7 @@ const gameSchema = baseGameSchema.extend({
     && game.searched.every((roomId) => allowed.includes(roomId))
     && interactions <= 1
     && (game.status === 'active' || interactions === 0)
-    && (!game.dialogue || ['lost-pilgrim', 'forge-smith', 'star-seer'].includes(id ?? ''))
+    && (!game.dialogue || NPC_ROOM_IDS.some((roomId) => roomId === id))
     && (!game.omen || (game.omen.roomId === id && game.searched.includes(game.omen.roomId)))
     && (!game.combat || (
       game.combat.roomId === id
@@ -187,6 +209,52 @@ const gameSchema = baseGameSchema.extend({
   if (!valid) {
     context.addIssue({ code: 'custom', message: 'The saved encounter or resource state is inconsistent.' })
   }
+}
+
+const versionTwoGameSchema = versionTwoGameFields.superRefine((game, context) => validateEncounter(game, context))
+
+const gameSchema = versionTwoGameFields.extend({
+  roomIndex: integer(0, 11),
+  deck: z.array(z.enum(ROOM_IDS)).min(1).max(12),
+  roomsCleared: integer(0, 36),
+  discovered: z.array(z.enum(ROOM_IDS)).max(36),
+  combat: combatSchema.nullable(),
+  history: z.array(z.object({
+    roomId: z.enum(ROOM_IDS), floor: integer(1, 3), known: z.boolean(),
+    outcome: z.enum(['explored', 'passed', 'victory', 'retreated']),
+    sequence: integer(0, 35),
+  }).strict()).max(36),
+  lastSideTripAt: integer(0, 36),
+  visit: z.object({ destinationId: z.enum(DESTINATION_IDS), venueId: z.enum(DESTINATION_IDS).nullable() }).strict().nullable(),
+  npcRewards: z.array(z.enum(NPC_ROOM_IDS)).max(3),
+  worldExplored: z.array(z.enum(DESTINATION_IDS)).max(9),
+  giftReturns: z.array(z.enum(ADVENTURER_IDS)).max(3),
+  giftClaims: z.array(z.enum(ADVENTURER_IDS)).max(3),
+}).strict().superRefine((game, context) => {
+  validateEncounter(game, context, true)
+  const visit = game.visit
+  const destination = visit ? DESTINATIONS[visit.destinationId] : null
+  const valid = game.lastSideTripAt <= game.roomsCleared
+    && (game.lastSideTripAt === 0 || game.lastSideTripAt >= 5)
+    && new Set(game.npcRewards).size === game.npcRewards.length
+    && new Set(game.worldExplored).size === game.worldExplored.length
+    && new Set(game.giftReturns).size === game.giftReturns.length
+    && new Set(game.giftClaims).size === game.giftClaims.length
+    && game.giftClaims.every((id) => game.giftReturns.includes(id))
+    && game.worldExplored.every((id) => DESTINATIONS[id].kind === 'city' && DESTINATIONS[id].floor <= game.floor)
+    && game.npcRewards.every((id) => REGION_ROOM_IDS.slice(0, game.floor).flat().some((roomId) => roomId === id))
+    && game.history.length <= game.roomsCleared
+    && new Set(game.history.map((entry) => entry.roomId)).size === game.history.length
+    && game.history.every((entry, index) => entry.floor <= game.floor
+      && REGION_ROOM_IDS[entry.floor - 1]?.some((id) => id === entry.roomId)
+      && entry.sequence < game.roomsCleared
+      && (index === 0 || entry.sequence > (game.history[index - 1]?.sequence ?? -1))
+      && (entry.outcome !== 'victory' || (entry.known && BATTLE_ROOM_IDS.some((id) => id === entry.roomId))))
+    && (!visit || (game.status === 'active' && game.combat === null && !game.puzzle && !game.dialogue && !game.omen
+      && destination !== null && destination.floor <= game.floor
+      && game.lastSideTripAt >= 5 && game.lastSideTripAt === game.roomsCleared
+      && (visit.venueId === null || destination.venues.includes(visit.venueId))))
+  if (!valid) context.addIssue({ code: 'custom', message: 'The saved journey, side trip, or gift state is inconsistent.' })
 })
 
 const savedFields = {
@@ -200,11 +268,26 @@ export const legacySavedGameSchema = z.object({
   ...savedFields,
 }).strict()
 
-export const savedGameSchema = z.object({
+export const versionTwoSavedGameSchema = z.object({
   version: z.literal(2),
-  game: gameSchema,
+  game: versionTwoGameSchema,
   ...savedFields,
 }).strict()
+
+export const savedGameSchema = z.object({
+  version: z.literal(3),
+  game: gameSchema,
+  social: socialStateSchema,
+  ...savedFields,
+}).strict().superRefine((save, context) => {
+  const receipts = save.social.messages.filter((entry) => entry.kind === 'received-gift')
+  const valid = receipts.every((entry) => entry.runNumber <= save.game.runNumber
+    && (entry.runNumber !== save.game.runNumber || (save.game.giftReturns.includes(entry.adventurerId)
+      && entry.claimed === save.game.giftClaims.includes(entry.adventurerId))))
+    && save.game.giftReturns.every((id) => save.game.giftClaims.includes(id)
+      || receipts.some((entry) => entry.runNumber === save.game.runNumber && entry.adventurerId === id && !entry.claimed))
+  if (!valid) context.addIssue({ code: 'custom', message: 'The saved gift receipts do not match this adventure.' })
+})
 
 export type Player = z.infer<typeof playerSchema>
 export type GameState = z.infer<typeof gameSchema>
@@ -212,6 +295,7 @@ export type Combat = z.infer<typeof combatSchema>
 export type Feedback = z.infer<typeof feedbackSchema>
 export type SavedGame = z.infer<typeof savedGameSchema>
 export type LegacySavedGame = z.infer<typeof legacySavedGameSchema>
+export type VersionTwoSavedGame = z.infer<typeof versionTwoSavedGameSchema>
 export type Settings = SavedGame['settings']
 
 export type GameAction =
@@ -228,3 +312,11 @@ export type GameAction =
   | { type: 'CLOSE_DIALOGUE' }
   | { type: 'INSPECT_INSCRIPTION' }
   | { type: 'RESOLVE_OMEN'; accept: boolean }
+  | { type: 'START_VISIT'; destinationId: DestinationId }
+  | { type: 'END_VISIT' }
+  | { type: 'VISIT_VENUE'; destinationId: DestinationId }
+  | { type: 'RETURN_TO_CITY' }
+  | { type: 'EXPLORE_CITY' }
+  | { type: 'VISIT_RESPONSE'; response: DialogueResponse }
+  | { type: 'VISIT_BUY'; item: 'tonic' | 'aether' | 'iron-charm' }
+  | { type: 'RECEIVE_GIFT'; adventurerId: AdventurerId; giftId: GiftId }

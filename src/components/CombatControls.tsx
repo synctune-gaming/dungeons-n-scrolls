@@ -18,7 +18,7 @@ export function CombatStatus({ game }: { game: GameState }) {
   return (
     <div className="combat-status">
       <div className="enemy-health-label">
-        <span>{combat.result === 'victory' ? 'Defeated' : room.kind === 'boss' ? getBossPattern(room.id).phases[combat.phase === 1 ? 0 : 1] : 'Enemy health'}</span>
+        <span>{combat.result === 'victory' ? 'Defeated' : room.kind === 'boss' ? getBossPattern(room.id).phases[combat.phase === 1 ? 0 : 1] : room.kind === 'combat' && room.enemy.tough ? 'Tough foe / Enemy health' : 'Enemy health'}</span>
         <strong>{combat.health}<span> / {combat.maxHealth}</span></strong>
       </div>
       <progress className="enemy-health" aria-label="Enemy health" max={combat.maxHealth} value={combat.health} />
