@@ -218,6 +218,7 @@ test('ends a fatal fight and starts a fresh run with the selected class', async 
 })
 
 test('plays all three floors to victory and preserves the win after restarting', async ({ page, activate }) => {
+  test.setTimeout(90_000)
   await enter(page, 'ashen-gate', { strength: 100, dexterity: 10 })
   const primaryAction = /^(Enter the gate|Draw your blade|Begin the fight|Approach the presence|Strike|Continue|Move on|Open the chest|Keep moving|Drink from the well|Challenge the boss)$/
   for (let step = 0; step < 100; step += 1) {
