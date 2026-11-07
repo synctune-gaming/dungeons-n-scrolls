@@ -10,10 +10,12 @@ export const ROOM_IDS = [
 ] as const
 
 export type RoomId = typeof ROOM_IDS[number]
-export type ClassId = 'wanderer' | 'shade' | 'ironbound'
+export const CLASS_IDS = ['wanderer', 'shade', 'ironbound'] as const
+export const RELIC_IDS = ['iron-charm', 'fleet-feather', 'ember-stone'] as const
+export type ClassId = typeof CLASS_IDS[number]
 export type Direction = 'left' | 'up' | 'right'
 export type Rune = 'moon' | 'flame' | 'eye'
-export type RelicId = 'iron-charm' | 'fleet-feather' | 'ember-stone'
+export type RelicId = typeof RELIC_IDS[number]
 export type RoomKind = 'passage' | 'combat' | 'npc' | 'treasure' | 'shop' | 'shrine' | 'boss'
 
 interface RoomBase {
@@ -38,7 +40,7 @@ export interface Choice {
 const integer = (min: number, max = 1_000_000) => z.number().int().min(min).max(max)
 
 const playerSchema = z.object({
-  classId: z.enum(['wanderer', 'shade', 'ironbound']),
+  classId: z.enum(CLASS_IDS),
   health: integer(0),
   maxHealth: integer(1),
   strength: integer(1, 100),
@@ -48,7 +50,7 @@ const playerSchema = z.object({
   xp: integer(0),
   level: integer(1, 10),
   potions: integer(0, 1000),
-  relics: z.array(z.enum(['iron-charm', 'fleet-feather', 'ember-stone'])).max(3),
+  relics: z.array(z.enum(RELIC_IDS)).max(3),
 }).strict()
 
 const gameSchema = z.object({

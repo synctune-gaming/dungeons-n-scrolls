@@ -1,4 +1,5 @@
 import { CLASSES, getRegion, RELICS, ROOMS } from './content'
+import { RELIC_IDS } from './types'
 import type { Choice, ClassId, GameAction, GameState, RelicId, RoomId } from './types'
 
 function random(rng: number): [number, number] {
@@ -149,7 +150,7 @@ function openChest(game: GameState): GameState {
   let [next, gold] = roll(game, 20, 35)
   gold *= game.floor
   next = { ...next, player: { ...next.player, gold: next.player.gold + gold }, puzzle: null }
-  const available = (Object.keys(RELICS) as RelicId[]).filter((id) => !next.player.relics.includes(id))
+  const available = RELIC_IDS.filter((id) => !next.player.relics.includes(id))
   let treasure = `${gold} gold`
   if (available.length > 0) {
     const [rolled, index] = roll(next, 0, available.length - 1)
