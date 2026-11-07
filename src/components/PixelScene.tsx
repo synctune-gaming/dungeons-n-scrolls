@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { Room } from '../game/types'
+import type { Combat, EffectType, Feedback, Room } from '../game/types'
 
 const WIDTH = 320
 const HEIGHT = 300
@@ -265,12 +265,12 @@ function shrine(context: Context, palette: Palette) {
   for (const [x, y] of [[144, 148], [179, 181], [138, 188], [174, 132], [165, 197]] as const) context.fillRect(x, y, 2, 2)
 }
 
-function creature(context: Context, room: Room, palette: Palette, floor: number) {
+function creature(context: Context, room: Room, palette: Palette, floor: number, phase: 1 | 2 = 1, heavy = false) {
   const boss = room.kind === 'boss'
   const armored = /sentry|guardian|knight/.test(room.id)
   context.save()
   context.translate(160, boss ? 177 : 181)
-  context.scale(boss ? 1.25 : 1, boss ? 1.25 : 1)
+  context.scale(boss ? (phase === 2 ? 1.35 : 1.25) : 1, boss ? (phase === 2 ? 1.35 : 1.25) : 1)
   const flesh = armored ? '#949287' : floor === 2 ? '#9f6349' : '#737b5a'
   glow(context, 0, 16, 48, boss ? '#c7785420' : '#bbaa7320')
   polygon(context, [[-43, 60], [-24, 41], [-24, 12], [-31, -12], [-20, -40], [17, -43], [33, -17], [24, 14], [27, 43], [44, 62]], palette.shadow)
@@ -279,6 +279,11 @@ function creature(context: Context, room: Room, palette: Palette, floor: number)
     polygon(context, [[20, -21], [57, -71], [77, -35], [63, -17], [51, -35], [40, -4]], '#8b5147')
     line(context, [[-22, -21], [-57, -71], [-51, -35]], '#c08659', 2)
     line(context, [[20, -21], [57, -71], [51, -35]], '#c08659', 2)
+    if (phase === 2) {
+      glow(context, 0, -18, 75, '#d7824540')
+      polygon(context, [[-65, -39], [-84, -65], [-72, -57], [-68, -80], [-57, -56], [-44, -62], [-47, -35]], '#d18c48')
+      polygon(context, [[65, -39], [84, -65], [72, -57], [68, -80], [57, -56], [44, -62], [47, -35]], '#d18c48')
+    }
   }
   polygon(context, [[-23, -16], [-37, 6], [-34, 38], [-43, 47], [-35, 51], [-22, 41], [-24, 11], [-10, -5]], flesh)
   polygon(context, [[21, -17], [35, 6], [30, 27], [45, 32], [45, 38], [25, 39], [20, 18], [12, -6]], flesh)
@@ -302,13 +307,18 @@ function creature(context: Context, room: Room, palette: Palette, floor: number)
     line(context, [[-15, -11], [0, 2], [19, -10]], '#a09a88', 2)
     line(context, [[-12, 9], [14, 11]], '#a09a88', 2)
   }
-  if (boss && floor !== 2) {
+  if (boss && floor !== 2 && phase === 1) {
     polygon(context, [[-19, -40], [-25, -65], [-11, -54], [-2, -74], [8, -54], [21, -68], [20, -42]], '#b59859')
     line(context, [[-18, -44], [18, -46]], '#e0c589', 3)
     context.fillStyle = '#b16352'
     context.fillRect(-2, -54, 4, 5)
   }
-  polygon(context, [[43, 29], [63, -1], [63, 7], [49, 34]], '#a5aaa7')
+  if (boss && phase === 2 && floor !== 2) {
+    glow(context, 0, -28, 36, floor === 3 ? '#b0a3da35' : '#e5ad7035')
+    line(context, [[-18, -38], [-8, -31], [-13, -21]], '#e1c08b', 2)
+    line(context, [[14, -40], [6, -34], [13, -20]], '#e1c08b', 2)
+  }
+  polygon(context, heavy ? [[43, 29], [51, -42], [56, -32], [49, 34]] : [[43, 29], [63, -1], [63, 7], [49, 34]], '#a5aaa7')
   line(context, [[41, 31], [51, 37]], '#a69364', 3)
   context.restore()
 }
@@ -331,30 +341,9 @@ function sword(context: Context) {
   context.fillRect(258, 284, 5, 4)
 }
 
-function render(context: Context, room: Room, floor: number, seed: number, height: number) {
-  const palette = PALETTES[floor - 1]
-  if (!palette) throw new Error(`No artwork palette exists for floor ${floor}.`)
-  context.imageSmoothingEnabled = false
-  context.save()
-  context.scale(1, height / HEIGHT)
-  if (room.zone === 'overworld') overworld(context, palette, seed, floor)
-  else dungeon(context, palette, seed)
-  context.restore()
-  context.save()
-  context.translate(0, (height - HEIGHT) * 0.66)
-  if (room.kind === 'treasure') chest(context, palette)
-  if (room.kind === 'npc' || room.kind === 'shop') pilgrim(context, palette, room.kind === 'shop')
-  if (room.kind === 'shrine') shrine(context, palette)
-  if (room.kind === 'combat' || room.kind === 'boss') creature(context, room, palette, floor)
-  context.restore()
-  context.save()
-  context.translate(0, height - HEIGHT)
-  sword(context)
-  context.restore()
-
+function dither(context: Context, seed: number, height: number) {
   const image = context.getImageData(0, 0, WIDTH, height)
   const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-  // Dither at the logical pixel resolution, before the browser scales the scene.
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < WIDTH; x += 1) {
       const index = (y * WIDTH + x) * 4
@@ -370,32 +359,301 @@ function render(context: Context, room: Room, floor: number, seed: number, heigh
   context.putImageData(image, 0, 0)
 }
 
-export function PixelScene({ room, floor, seed }: { room: Room; floor: number; seed: number }) {
+function backdrop(context: Context, room: Room, floor: number, seed: number, height: number) {
+  const palette = PALETTES[floor - 1]
+  if (!palette) throw new Error(`No artwork palette exists for floor ${floor}.`)
+  context.imageSmoothingEnabled = false
+  context.save()
+  context.scale(1, height / HEIGHT)
+  if (room.zone === 'overworld') overworld(context, palette, seed, floor)
+  else dungeon(context, palette, seed)
+  context.restore()
+  dither(context, seed, height)
+}
+
+const EFFECT_COLORS: Partial<Record<EffectType, string>> = {
+  ember: '#e5ad70', frost: '#a8cedb', storm: '#bcb0df', ward: '#9daed4',
+  heal: '#b4c7a0', phase: '#e1c08b', secret: '#bcb0df', reveal: '#e1c08b', victory: '#e1c08b',
+}
+
+function castingHand(context: Context, height: number, color: string, progress: number) {
+  context.save()
+  context.translate(0, -Math.sin(progress * Math.PI) * 7)
+  polygon(context, [[15, height], [21, height - 27], [33, height - 41], [47, height - 44], [57, height - 37], [63, height - 20], [55, height]], '#747a83')
+  line(context, [[23, height - 24], [47, height - 30], [57, height - 22]], '#bec5bd', 2)
+  line(context, [[32, height - 40], [35, height - 29]], '#d2d4c5', 2)
+  glow(context, 44, height - 52, 23, `${color}70`)
+  context.fillStyle = color
+  context.fillRect(39, height - 58, 10, 10)
+  context.fillRect(36, height - 55, 16, 4)
+  context.restore()
+}
+
+function spellEffect(context: Context, type: EffectType, progress: number, height: number) {
+  const color = EFFECT_COLORS[type]
+  if (!color || progress >= 1) return
+  const targetY = height * 0.42
+  context.save()
+  context.globalAlpha = Math.min(1, (1 - progress) * 2.8)
+  if (type === 'ember' || type === 'frost' || type === 'storm' || type === 'ward' || type === 'heal') {
+    castingHand(context, height, color, progress)
+  }
+  const impact = Math.min(1, progress * 2.5)
+  if (type === 'ember' || type === 'frost') {
+    const x = 44 + 116 * impact
+    const y = height - 52 + (targetY - height + 52) * impact
+    glow(context, x, y, 24, `${color}65`)
+    context.fillStyle = color
+    context.fillRect(x - 5, y - 5, 10, 10)
+    for (let index = 0; index < 24; index += 1) {
+      const angle = index * 2.4
+      const distance = (progress > 0.38 ? (progress - 0.38) * 78 : index * 0.6)
+      const px = x + Math.cos(angle) * distance
+      const py = y + Math.sin(angle) * distance * 0.7
+      context.fillRect(px, py, index % 3 === 0 ? 4 : 2, type === 'frost' ? 4 : 2)
+    }
+  } else if (type === 'storm') {
+    const points: Point[] = [[44, height - 52]]
+    for (let index = 1; index <= 7; index += 1) {
+      const part = index / 7
+      points.push([44 + 116 * part + (index % 2 ? -9 : 8), height - 52 + (targetY - height + 52) * part])
+    }
+    line(context, points, color, 4)
+    line(context, points, '#d9e0ed', 1)
+    glow(context, 160, targetY, 34, '#bcb0df50')
+  } else {
+    const centerY = type === 'ward' || type === 'heal' ? height - 54 : targetY + 12
+    const radius = 12 + progress * 58
+    for (let index = 0; index < 32; index += 1) {
+      const angle = index * Math.PI / 16 + progress
+      const x = 160 + Math.cos(angle) * radius
+      const y = centerY + Math.sin(angle) * radius * 0.55
+      context.fillStyle = color
+      context.fillRect(x, y, 2 + index % 2, 2 + index % 2)
+    }
+    glow(context, 160, centerY, radius + 8, `${color}25`)
+  }
+  context.restore()
+}
+
+function combatConditions(context: Context, combat: Combat | null, height: number, time: number) {
+  if (!combat || combat.result !== 'fighting') return
+  const shift = (height - HEIGHT) * 0.66
+  if (combat.frozenTurns > 0) {
+    glow(context, 160, 165 + shift, 48, '#a8cedb25')
+    for (const [x, y] of [[125, 156], [143, 194], [184, 150], [192, 204]] as const) {
+      polygon(context, [[x - 7, y + shift + 15], [x, y + shift - 12], [x + 6, y + shift + 15]], '#91b2c4')
+      line(context, [[x, y + shift - 10], [x + 3, y + shift + 12]], '#c0dce1')
+    }
+  }
+  if (combat.burnTurns > 0) {
+    for (let index = 0; index < 12; index += 1) {
+      context.fillStyle = index % 2 ? '#e5ad70' : '#bd784e'
+      const y = 219 + shift - (time * 19 + index * 9) % 67
+      context.fillRect(131 + noise(index, 2, 8) * 58, y, 2, 3)
+    }
+  }
+  if (combat.ward > 0) {
+    const points: Point[] = []
+    for (let index = 0; index <= 24; index += 1) {
+      const angle = index * Math.PI / 12
+      points.push([163 + Math.cos(angle) * 72, height - 41 + Math.sin(angle) * 25])
+    }
+    line(context, points, '#8fa7c688', 1)
+    glow(context, 160, height - 37, 54, '#8fa7c614')
+  }
+}
+
+function renderFrame(
+  context: Context, background: HTMLCanvasElement, room: Room, floor: number,
+  seed: number, height: number, known: boolean, combat: Combat | null,
+  feedback: Feedback | null, time: number, progress: number, reduced: boolean,
+) {
+  const palette = PALETTES[floor - 1]
+  if (!palette) throw new Error(`No artwork palette exists for floor ${floor}.`)
+  context.clearRect(0, 0, WIDTH, height)
+  context.save()
+  const shake = !reduced && feedback && progress < 1 && feedback.playerDamage > 0
+    ? Math.sin(progress * 22) * (1 - progress) * 2 : 0
+  context.translate(shake, 0)
+  context.drawImage(background, 0, 0)
+  context.save()
+  context.scale(1, height / HEIGHT)
+  const flicker = reduced ? 0 : Math.sin(time * 2.3) * 0.035
+  if (room.zone === 'dungeon') {
+    torch(context, 43, 131, 1.1 + flicker)
+    torch(context, 275, 131, 1.1 - flicker)
+  } else {
+    torch(context, 120, 152, 0.65 + flicker)
+    torch(context, 201, 152, 0.65 - flicker)
+  }
+  context.restore()
+  context.save()
+  context.translate(0, (height - HEIGHT) * 0.66)
+  if (!reduced) context.translate(Math.sin(time * 1.3) * 0.8, Math.cos(time * 1.8) * 0.8)
+  if (room.kind === 'treasure') chest(context, palette)
+  if (room.kind === 'npc' || room.kind === 'shop') pilgrim(context, palette, room.kind === 'shop')
+  if (room.kind === 'shrine') shrine(context, palette)
+  if (room.kind === 'combat' || room.kind === 'boss') {
+    const actorScale = Math.min(1, Math.max(0.6, (height - 45) / 160))
+    context.translate(0, height * 0.6 - (177 + (height - HEIGHT) * 0.66))
+    context.translate(160, 177)
+    context.scale(actorScale, actorScale)
+    context.translate(-160, -177)
+    context.globalAlpha = known ? (combat?.result === 'victory' ? reduced ? 0.2 : Math.max(0.2, 1 - progress * 1.5) : 1) : 0.13
+    if (!reduced && feedback && progress < 0.35 && feedback.enemyDamage > 0) context.translate(-Math.sin(progress * 18) * 3, 0)
+    creature(context, room, palette, floor, combat?.phase ?? 1, combat?.intent === 'heavy')
+    if (!known) {
+      context.globalAlpha = 0.75
+      context.fillStyle = '#d8bf82'
+      context.fillRect(148, 149, 3, 2)
+      context.fillRect(167, 148, 3, 2)
+    }
+  }
+  context.restore()
+  combatConditions(context, combat, height, reduced ? 0 : time)
+  if (!reduced) {
+    for (let index = 0; index < 28; index += 1) {
+      const x = (noise(index, 2, seed) * WIDTH + Math.sin(time * 0.3 + index) * 5 + WIDTH) % WIDTH
+      const y = (noise(index, 5, seed) * height - time * (2 + index % 3) + height * 10) % height
+      context.fillStyle = index % 5 === 0 ? '#cbb28250' : '#b0b6ae15'
+      context.fillRect(x, y, index % 3 ? 1 : 2, 1)
+    }
+  }
+  if (!known) {
+    context.save()
+    context.globalAlpha = 0.2
+    for (let index = 0; index < 9; index += 1) {
+      const x = -30 + (index * 49 + (reduced ? 0 : time * 7)) % 370
+      glow(context, x, height * 0.58 + Math.sin(index) * 20, 58, '#74788390')
+    }
+    context.restore()
+  }
+  context.save()
+  const weaponScale = Math.min(1, height / 180)
+  context.translate(280, height)
+  context.scale(weaponScale, weaponScale)
+  context.translate(-280, -HEIGHT)
+  const actionType = feedback?.actionType === 'info' ? feedback.type : feedback?.actionType
+  if (!reduced && feedback && progress < 1) {
+    if (actionType === 'strike') {
+      const swing = Math.sin(Math.min(1, progress * 1.8) * Math.PI)
+      context.translate(276, 271)
+      context.rotate(-swing * 0.85)
+      context.translate(-276 - swing * 18, -271 - swing * 8)
+    } else if (actionType === 'dodge') {
+      context.translate(Math.sin(progress * Math.PI) * 19, 0)
+    } else if (actionType === 'guard') {
+      context.translate(-Math.sin(progress * Math.PI) * 11, -Math.sin(progress * Math.PI) * 13)
+    }
+  }
+  sword(context)
+  context.restore()
+  if (!reduced && feedback && progress < 1) {
+    if (actionType) spellEffect(context, actionType, progress, height)
+    if (feedback.type !== actionType) spellEffect(context, feedback.type, progress, height)
+    context.save()
+    context.globalAlpha = Math.min(1, (1 - progress) * 3)
+    context.font = '12px "DM Mono", monospace'
+    context.textAlign = 'center'
+    if (feedback.enemyDamage > 0) {
+      const y = height * 0.32 - progress * 20
+      context.fillStyle = '#17171d'
+      context.fillText(`-${feedback.enemyDamage}`, 161, y + 1)
+      context.fillStyle = '#f1d29e'
+      context.fillText(`-${feedback.enemyDamage}`, 160, y)
+    }
+    if (feedback.healing > 0 || feedback.playerDamage > 0) {
+      context.fillStyle = feedback.healing > 0 ? '#c6d7b2' : '#e5a497'
+      context.fillText(`${feedback.healing > 0 ? '+' : '-'}${feedback.healing || feedback.playerDamage} HP`, 63, Math.max(28, height - 58) - progress * 16)
+    }
+    context.restore()
+  }
+  context.restore()
+}
+
+export function PixelScene({ room, floor, seed, known = true, combat = null, feedback = null, reducedMotion = false, paused = false }: {
+  room: Room
+  floor: number
+  seed: number
+  known?: boolean
+  combat?: Combat | null
+  feedback?: Feedback | null
+  reducedMotion?: boolean
+  paused?: boolean
+}) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const live = useRef({ known, combat, feedback })
+  const effect = useRef<{ feedback: Feedback; started: number } | null>(null)
+  const redraw = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    if (feedback && feedback.id !== live.current.feedback?.id) {
+      effect.current = { feedback, started: performance.now() }
+    }
+    live.current = { known, combat, feedback }
+    if (reducedMotion || paused) redraw.current?.()
+  }, [known, combat, feedback, reducedMotion, paused])
   useEffect(() => {
     const element = canvas.current
     const context = element?.getContext('2d')
     if (!context) throw new Error('The browser could not create the dungeon artwork. Enable canvas rendering and reload.')
     if (!element) throw new Error('The dungeon scene is missing its canvas.')
-    const redraw = () => {
-      const bounds = element.getBoundingClientRect()
-      const height = Math.max(150, Math.round(WIDTH * bounds.height / Math.max(1, bounds.width)))
-      element.height = height
-      render(context, room, floor, seed, height)
+    const background = document.createElement('canvas')
+    background.width = WIDTH
+    const backgroundContext = background.getContext('2d')
+    if (!backgroundContext) throw new Error('The browser could not cache the dungeon background.')
+    let height = 0
+    let animation = 0
+    let lastFrame = 0
+    const still = reducedMotion || paused
+    const draw = (now: number) => {
+      const current = live.current
+      const active = effect.current
+      const progress = active ? Math.min(1, (now - active.started) / 750) : 1
+      renderFrame(context, background, room, floor, seed, height, current.known, current.combat, active?.feedback ?? null, now / 1000, progress, still)
     }
-    redraw()
-    const observer = new ResizeObserver(redraw)
+    const resize = () => {
+      const bounds = element.getBoundingClientRect()
+      const nextHeight = Math.max(100, Math.round(WIDTH * bounds.height / Math.max(1, bounds.width)))
+      if (height !== nextHeight) {
+        height = nextHeight
+        element.height = height
+        background.height = height
+        backdrop(backgroundContext, room, floor, seed, height)
+      }
+      draw(performance.now())
+    }
+    const tick = (now: number) => {
+      if (document.hidden) { animation = 0; return }
+      if (now - lastFrame >= 50) { draw(now); lastFrame = now }
+      animation = requestAnimationFrame(tick)
+    }
+    const visibility = () => {
+      if (document.hidden) { cancelAnimationFrame(animation); animation = 0 }
+      else if (!still && animation === 0) animation = requestAnimationFrame(tick)
+    }
+    redraw.current = () => draw(performance.now())
+    resize()
+    const observer = new ResizeObserver(resize)
     observer.observe(element)
-    return () => observer.disconnect()
-  }, [room, floor, seed])
+    if (!still && !document.hidden) animation = requestAnimationFrame(tick)
+    document.addEventListener('visibilitychange', visibility)
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(animation)
+      document.removeEventListener('visibilitychange', visibility)
+      redraw.current = null
+    }
+  }, [room, floor, seed, reducedMotion, paused])
   return (
     <canvas
       ref={canvas}
       width={WIDTH}
       height={HEIGHT}
       role="img"
-      aria-label={`${room.name}: an original pixel-art ${room.zone === 'overworld' ? 'woodland path' : 'torchlit dungeon'}, seen from behind your sword.`}
+      aria-label={`${known ? room.name : 'An unidentified presence'}: an original pixel-art ${room.zone === 'overworld' ? 'woodland path' : 'torchlit dungeon'}, seen from behind your sword.`}
       className="pixel-scene"
+      data-motion={reducedMotion ? 'reduced' : paused ? 'paused' : 'animated'}
     />
   )
 }

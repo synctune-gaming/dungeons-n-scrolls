@@ -5,18 +5,21 @@ import {
   FlaskConical, Heart, HelpCircle, Map, Moon, Mouse, Plus, ScrollText,
   Settings as SettingsIcon, Shield, Skull, Sparkles, Swords, UserRound,
   Volume2, VolumeX, X,
+  CircleHelp, WandSparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Modal } from './components/Modal'
 import { PixelScene } from './components/PixelScene'
-import { CLASSES, getRegion, REGIONS, RELICS, ROOM_LABELS, ROOMS } from './game/content'
-import { createRun, experienceTarget, gameReducer, getChoices, getRoom } from './game/engine'
+import { CombatStatus, SpellBar, SPELL_ICONS } from './components/CombatControls'
+import { CLASSES, getDialogue, getRegion, REGIONS, RELICS, ROOM_LABELS, ROOMS, SPELLS } from './game/content'
+import { createRun, experienceTarget, gameReducer, getChoices, getRoom, getRoomPresentation, spellUnavailable } from './game/engine'
 import { loadSave, writeSave } from './game/persistence'
-import { CLASS_IDS } from './game/types'
+import { CLASS_IDS, INSCRIPTION_ROOM_IDS, SPELL_IDS } from './game/types'
 import type { ClassId, Direction, GameAction, GameState, RoomKind, Rune, SavedGame } from './game/types'
 import { useRoomGestures } from './useRoomGestures'
+import { useReducedMotion } from './useReducedMotion'
 
-type Panel = 'character' | 'inventory' | 'journal' | 'map' | 'help' | 'settings' | 'restart' | null
+type Panel = 'character' | 'inventory' | 'journal' | 'map' | 'help' | 'settings' | 'restart' | 'spells' | null
 
 const KIND_ICONS: Record<RoomKind, LucideIcon> = {
   passage: DoorOpen, combat: Swords, npc: UserRound, treasure: Backpack,
@@ -27,12 +30,12 @@ const RELIC_ICONS = { 'iron-charm': Shield, 'fleet-feather': Feather, 'ember-sto
 const DIRECTIONS = { left: ArrowLeft, up: ArrowUp, right: ArrowRight }
 const ADVICE: Record<RoomKind, string> = {
   passage: 'Every path has a story. Some have teeth.',
-  combat: 'Strength softens a fight. Dexterity can avoid one.',
+  combat: 'Read the next move. A well-timed ward can be worth more than a sharp blade.',
   npc: 'Not every encounter needs a blade. Try a conversation.',
   treasure: 'Dexterity 8 opens locks. Below that, you will need to match the runes.',
   shop: 'Tonics restore 24 health. Keep one for the boss.',
   shrine: 'A quiet room can be worth more than a full purse.',
-  boss: 'No escaping this one. Study its weakness, then strike.',
+  boss: 'A guardian has more than one face. Save a little magic for what wakes next.',
 }
 
 function randomSeed() {
@@ -71,16 +74,16 @@ function Journey({ game, compact = false }: { game: GameState; compact?: boolean
     <ol className={`journey ${compact ? 'compact' : ''}`} aria-label="Current floor route">
       {game.deck.map((id, index) => {
         const room = ROOMS[id]
-        const visible = index <= game.roomIndex || room.kind === 'boss'
+        const visible = game.discovered.includes(id)
         const complete = index < game.roomIndex || game.status === 'won'
         const current = index === game.roomIndex && game.status === 'active'
-        const Icon = complete ? Check : visible ? KIND_ICONS[room.kind] : Compass
+        const Icon = complete && visible ? Check : visible ? KIND_ICONS[room.kind] : CircleHelp
         return (
           <li key={id} className={`${complete ? 'complete' : ''} ${current ? 'current' : ''}`} aria-current={current ? 'step' : undefined}>
             <span className="journey-node"><Icon size={13} strokeWidth={1.6} /></span>
             <div>
-              <span className="journey-name">{visible ? room.name : 'Uncharted room'}</span>
-              <span className="journey-detail">{current ? 'You are here' : complete ? 'Explored' : room.kind === 'boss' ? 'Waiting at the end' : 'A story still unwritten'}</span>
+              <span className={`journey-name ${visible ? 'room-discovered' : 'room-unknown'}`}>{visible ? room.name : <><span aria-hidden="true">???</span><span className="sr-only">Unidentified room {index + 1}</span></>}</span>
+              <span className="journey-detail">{current ? visible ? 'You are here' : 'Something waits here' : complete ? visible ? 'Explored' : 'Passed unseen' : 'A story still unwritten'}</span>
             </div>
             {current && <span className="current-dot" />}
           </li>
@@ -117,14 +120,25 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>(null)
   const [nextClass, setNextClass] = useState<ClassId>(save.game.player.classId)
   const [lastDirection, setLastDirection] = useState<Direction>('up')
+  const [animating, setAnimating] = useState(false)
+  const reducedMotion = useReducedMotion()
   const audio = useRef<AudioContext | null>(null)
   const dialogTrigger = useRef<HTMLElement | null>(null)
   const game = save.game
   const player = game.player
   const room = getRoom(game)
+  const presentation = getRoomPresentation(game)
   const region = getRegion(game.floor)
   const choices = getChoices(game)
-  const blocked = panel !== null || game.puzzle !== null || game.status !== 'active'
+  const interactionOpen = panel !== null || game.puzzle !== null || game.dialogue || game.omen !== null
+  const blocked = interactionOpen || game.status !== 'active' || animating
+
+  useEffect(() => {
+    if (reducedMotion || game.feedback.id === 0 || game.feedback.type === 'info') { setAnimating(false); return }
+    setAnimating(true)
+    const timer = window.setTimeout(() => setAnimating(false), 450)
+    return () => window.clearTimeout(timer)
+  }, [game.feedback.id, game.feedback.type, reducedMotion])
 
   useEffect(() => { setSaveError(writeSave(save)) }, [save])
   useEffect(() => () => {
@@ -133,8 +147,11 @@ export default function App() {
     }
   }, [])
 
-  const playSound = useCallback(() => {
-    if (!save.settings.sound) return
+  const playSound = useCallback((action: GameAction) => {
+    if (!save.settings.sound || game.status !== 'active') return
+    if (action.type === 'CAST_SPELL' && spellUnavailable(game, action.spell)) return
+    if (action.type === 'DRINK_POTION' && (player.potions === 0 || player.health === player.maxHealth)) return
+    if (action.type === 'DRINK_AETHER' && (player.aether === 0 || player.mana === player.maxMana)) return
     const start = async () => {
       try {
         audio.current ??= new AudioContext()
@@ -142,8 +159,9 @@ export default function App() {
         if (context.state === 'suspended') await context.resume()
         const oscillator = context.createOscillator()
         const gain = context.createGain()
-        oscillator.type = 'triangle'
-        oscillator.frequency.setValueAtTime(room.kind === 'combat' || room.kind === 'boss' ? 140 : 330, context.currentTime)
+        oscillator.type = action.type === 'CAST_SPELL' && action.spell === 'storm-lance' ? 'sawtooth' : 'triangle'
+        const frequency = action.type === 'CAST_SPELL' ? 440 + SPELL_IDS.indexOf(action.spell) * 95 : room.kind === 'combat' || room.kind === 'boss' ? 140 : 330
+        oscillator.frequency.setValueAtTime(frequency, context.currentTime)
         oscillator.frequency.exponentialRampToValueAtTime(90, context.currentTime + 0.12)
         gain.gain.setValueAtTime(0.035, context.currentTime)
         gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.16)
@@ -159,7 +177,7 @@ export default function App() {
       }
     }
     void start()
-  }, [save.settings.sound, room.kind])
+  }, [save.settings.sound, room.kind, game, player])
 
   const act = useCallback((action: GameAction) => {
     setSave((current) => {
@@ -172,7 +190,7 @@ export default function App() {
         },
       }
     })
-    playSound()
+    playSound(action)
   }, [playSound])
 
   const choose = useCallback((direction: Direction, trigger?: HTMLElement) => {
@@ -203,6 +221,12 @@ export default function App() {
       } else if (event.key.toLowerCase() === 'p') {
         event.preventDefault()
         act({ type: 'DRINK_POTION' })
+      } else if (event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        act({ type: 'DRINK_AETHER' })
+      } else if (/^[1-5]$/.test(event.key)) {
+        const spell = SPELL_IDS[Number(event.key) - 1]
+        if (spell) { event.preventDefault(); act({ type: 'CAST_SPELL', spell }) }
       }
     }
     document.addEventListener('keydown', handleKey)
@@ -228,10 +252,15 @@ export default function App() {
     { panel: null, label: 'Adventure', icon: Compass },
     { panel: 'character', label: 'Character', icon: UserRound },
     { panel: 'inventory', label: 'Inventory', icon: Backpack },
+    { panel: 'spells', label: 'Grimoire', icon: WandSparkles },
     { panel: 'journal', label: 'Journal', icon: BookOpen },
   ]
-  const EncounterIcon = KIND_ICONS[room.kind]
+  const EncounterIcon = presentation.known ? KIND_ICONS[room.kind] : CircleHelp
   const warning = saveError ?? notice
+  const fighting = game.combat?.result === 'fighting'
+  const victorious = game.combat?.result === 'victory'
+  const inscription = INSCRIPTION_ROOM_IDS.some((id) => id === room.id)
+  const readInscription = game.searched.some((id) => id === room.id)
 
   return (
     <div className="app-shell" onClickCapture={(event) => {
@@ -259,7 +288,7 @@ export default function App() {
             >
               <item.icon size={19} strokeWidth={1.6} />{item.label}
               {item.panel === null && <span className="nav-active-dot" />}
-              {item.panel === 'inventory' && <span className="nav-count">{player.relics.length + player.potions}</span>}
+              {item.panel === 'inventory' && <span className="nav-count">{player.relics.length + player.potions + player.aether}</span>}
             </button>
           ))}
         </nav>
@@ -300,14 +329,14 @@ export default function App() {
         {warning && <div className="notice" role="alert"><span>{warning}</span>{!saveError && <button className="icon-button" aria-label="Dismiss notice" onClick={() => setNotice(null)}><X size={17} /></button>}</div>}
 
         <div className="workspace-content">
-          <main id="adventure" tabIndex={-1}>
+          <main id="adventure" tabIndex={-1} className={fighting ? 'combat-active' : victorious ? 'combat-won' : ''}>
             <header className="adventure-header">
               <div><h1>{region.name}</h1><p className="region-subtitle">{region.subtitle}</p></div>
               <button className="floor-badge" onClick={() => setPanel('map')} aria-label="View journey map"><Map size={17} /><span>Floor<strong>{String(game.floor).padStart(2, '0')}</strong></span></button>
             </header>
 
             <section className="player-stats" aria-label="Adventurer status">
-              <div className="health-stat"><div className="stat-top"><span><Heart size={15} />Health</span><strong>{player.health}<span> / {player.maxHealth}</span></strong></div><progress aria-label="Health" max={player.maxHealth} value={player.health} className={player.health <= player.maxHealth * 0.25 ? 'critical' : ''} /></div>
+              <div className="health-stat"><div className="stat-top"><span><Heart size={15} />Health</span><strong>{player.health}<span> / {player.maxHealth}</span></strong></div><progress aria-label="Health" max={player.maxHealth} value={player.health} className={player.health <= player.maxHealth * 0.25 ? 'critical' : ''} /><div className="mana-stat"><div className="stat-top"><span><WandSparkles size={13} />Mana</span><strong>{player.mana}<span> / {player.maxMana}</span></strong></div><progress aria-label="Mana" max={player.maxMana} value={player.mana} /></div></div>
               <div className="gold-stat"><Coins size={20} /><div><span className="stat-label">Gold</span><strong>{player.gold}<small>g</small></strong></div></div>
               <div className="level-stat"><Sparkles size={19} /><div><div className="stat-top"><span className="stat-label">Level</span><strong>{player.level}</strong></div><progress aria-label="Experience" value={player.level === 10 ? 1 : player.xp} max={player.level === 10 ? 1 : experienceTarget(player.level)} /></div></div>
             </section>
@@ -321,15 +350,26 @@ export default function App() {
               >
                 <div className={`room-content room-enter-${lastDirection}`} key={`${game.runNumber}-${game.floor}-${game.roomIndex}`}>
                   <div className="scene-frame">
-                    <PixelScene room={room} floor={game.floor} seed={game.seed + game.roomIndex} />
+                    <PixelScene room={room} floor={game.floor} seed={game.seed + game.roomIndex} known={presentation.known} combat={game.combat} feedback={game.feedback} reducedMotion={reducedMotion} paused={interactionOpen || game.status !== 'active'} />
                     <div className="scene-shade" />
                     <div className="scene-header"><span><Compass size={12} />{room.zone === 'overworld' ? 'The overworld' : region.dungeon}</span><span>{String(game.roomIndex + 1).padStart(2, '0')}<span className="room-total"> / {game.deck.length}</span></span></div>
-                    <div className="scene-footer"><span className={`encounter-tag ${room.kind === 'boss' ? 'boss-tag' : ''}`}><EncounterIcon size={12} />{ROOM_LABELS[room.kind]}</span><span className="pixel-label">A place yet to be remembered</span></div>
+                    <div className="scene-footer"><span className={`encounter-tag ${presentation.known && room.kind === 'boss' ? 'boss-tag' : ''}`}><EncounterIcon size={12} />{presentation.known ? ROOM_LABELS[room.kind] : 'Unseen presence'}</span><span className="pixel-label">{fighting ? 'Steel is not your only answer.' : 'A place yet to be remembered'}</span></div>
+                    {game.feedback.type === 'reveal' && <div className="discovery-flare" key={`reveal-${game.feedback.id}`} aria-hidden="true"><span>Discovered</span></div>}
+                    {game.feedback.type === 'phase' && <div className="phase-flare" key={`phase-${game.feedback.id}`} aria-hidden="true"><span>Something else awakens</span></div>}
+                    {!victorious && game.status === 'active' && <div className="scene-hotspots">
+                      {!fighting && inscription && <button className={`scene-hotspot inscription-hotspot ${readInscription ? 'spent' : ''}`} aria-label="Inspect the hidden inscription" disabled={blocked || readInscription} onClick={() => act({ type: 'INSPECT_INSCRIPTION' })}><Eye size={16} /><span>{readInscription ? 'Read' : 'Inspect'}</span></button>}
+                      {!fighting && room.kind === 'npc' && <button className="scene-hotspot person-hotspot" aria-label="Speak to the stranger" disabled={blocked} onClick={() => choose('left')}><UserRound size={16} /><span>Talk</span></button>}
+                      {!fighting && room.kind === 'treasure' && <button className="scene-hotspot treasure-hotspot" aria-label="Examine the chest" disabled={blocked} onClick={() => choose('up')}><Backpack size={16} /><span>Open</span></button>}
+                      {(room.kind === 'combat' || room.kind === 'boss') && !presentation.known && <button className="scene-hotspot lantern-hotspot" aria-label="Reveal the hidden presence" disabled={blocked || player.mana < 2} onClick={() => choose('right')}><Flame size={16} /><span>Reveal</span></button>}
+                      {fighting && <button className={`scene-hotspot lantern-hotspot ${game.studied ? 'spent' : ''}`} aria-label="Study enemy" disabled={blocked || game.studied || player.mana < 3} onClick={() => act({ type: 'STUDY_ENEMY' })}><Eye size={16} /><span>{game.studied ? 'Known' : '3 mana'}</span></button>}
+                      {fighting && room.kind === 'combat' && <button className="scene-hotspot retreat-hotspot" aria-label="Retreat" disabled={blocked} onClick={() => act({ type: 'FLEE' })}><DoorOpen size={16} /><span>Retreat</span></button>}
+                    </div>}
+                    {victorious && <div className="victory-reveal"><Crown size={23} /><strong>{room.kind === 'boss' ? 'The passage opens.' : 'The path is clear.'}</strong><span>Gold and experience collected</span></div>}
                   </div>
                   <div className="room-copy">
-                    <div className="room-title-row"><h2 id="room-title" tabIndex={-1}>{room.name}</h2>{(room.kind === 'combat' || room.kind === 'boss') && <span className="enemy-guard"><Shield size={13} />Guard {room.enemy.defense}</span>}</div>
-                    <p>{room.description}</p>
-                    <div className="room-copy-footer"><span><span className="small-diamond" />{game.status === 'active' ? 'Your next move is yours.' : 'The story of this run is written.'}</span><span>{room.zone === 'overworld' ? 'Outside' : 'Inside'}<DoorOpen size={12} /></span></div>
+                    <div className="room-title-row"><h2 id="room-title" tabIndex={-1}>{presentation.name}</h2>{presentation.known && (room.kind === 'combat' || room.kind === 'boss') && <span className={`enemy-weakness weakness-${room.enemy.weakness}`}>Weak to {room.enemy.weakness}</span>}</div>
+                    {game.combat ? <CombatStatus game={game} /> : <p>{presentation.description}</p>}
+                    {!game.combat && <div className="room-copy-footer"><span><span className="small-diamond" />{game.status === 'active' ? 'Your next move is yours.' : 'The story of this run is written.'}</span><span>{room.zone === 'overworld' ? 'Outside' : 'Inside'}<DoorOpen size={12} /></span></div>}
                   </div>
                 </div>
                 <span className="frame-corner top-left" /><span className="frame-corner top-right" /><span className="frame-corner bottom-left" /><span className="frame-corner bottom-right" />
@@ -337,13 +377,14 @@ export default function App() {
               <div className="action-rail" role="group" aria-label="Quick actions">
                 <button className="rail-button potion-button" aria-label="Drink a healing tonic" disabled={blocked || player.potions === 0 || player.health === player.maxHealth} onClick={() => act({ type: 'DRINK_POTION' })}><FlaskConical size={21} /><span>{player.potions}</span></button>
                 <button className="rail-button" aria-label="Open your satchel" onClick={() => setPanel('inventory')}><Backpack size={21} /><span>Items</span></button>
-                <button className="rail-button" aria-label="View your journey" onClick={() => setPanel('map')}><Map size={21} /><span>Map</span></button>
-                <button className={`rail-button ${save.settings.sound ? 'sound-active' : ''}`} aria-label={save.settings.sound ? 'Mute sound' : 'Enable sound'} aria-pressed={save.settings.sound} onClick={toggleSound}>{save.settings.sound ? <Volume2 size={20} /> : <VolumeX size={20} />}<span>Sound</span></button>
+                <button className="rail-button magic-rail" aria-label="Open your grimoire" onClick={() => setPanel('spells')}><WandSparkles size={21} /><span>Spells</span></button>
+                <button className="rail-button map-rail" aria-label="View your journey" onClick={() => setPanel('map')}><Map size={21} /><span>Map</span></button>
+                <button className={`rail-button sound-rail ${save.settings.sound ? 'sound-active' : ''}`} aria-label={save.settings.sound ? 'Mute sound' : 'Enable sound'} aria-pressed={save.settings.sound} onClick={toggleSound}>{save.settings.sound ? <Volume2 size={20} /> : <VolumeX size={20} />}<span>Sound</span></button>
               </div>
             </div>
 
             {game.status === 'active' ? (
-              <div className="choice-buttons" role="group" aria-label="Choose your next move">
+              <div className={`choice-buttons ${choices.length === 1 ? 'single-choice' : ''}`} role="group" aria-label="Choose your next move">
                 {choices.map((choice) => {
                   const Icon = DIRECTIONS[choice.direction]
                   return <button key={choice.direction} className={`choice-button ${choice.direction === 'up' ? 'primary-choice' : ''}`} aria-label={choice.label} disabled={choice.disabled || blocked} onClick={(event) => choose(choice.direction, event.currentTarget)}>
@@ -358,24 +399,45 @@ export default function App() {
                 <button className="gold-button" onClick={() => { setNextClass(player.classId); setPanel('restart') }}>Try a new adventure<ArrowRight size={16} /></button>
               </section>
             )}
-            {save.settings.hints && <div className="gesture-hint"><Mouse size={14} /><span>Scroll or swipe to explore</span><span className="hint-separator" /><span className="keyboard-hint">Arrow keys work, too</span><span className="mobile-key-hint">Tap a choice below the room</span></div>}
+            {fighting && <SpellBar game={game} disabled={blocked} onAction={act} />}
+            {room.kind === 'shop' && <button className="outline-button merchant-extra" disabled={blocked || player.gold < 12 || player.aether >= 1000} onClick={() => act({ type: 'BUY_AETHER' })}><WandSparkles size={15} />Buy an aether vial / 12 gold</button>}
+            {game.feedback.id > 0 && <p className={`action-feedback feedback-${game.feedback.type}`} key={`feedback-${game.feedback.id}`} role="status">{game.feedback.text || (victorious ? 'The way is clear. Continue when you are ready.' : 'Your next move is yours.')}</p>}
+            {save.settings.hints && !fighting && <div className="gesture-hint"><Mouse size={14} /><span>Scroll or swipe to explore</span><span className="hint-separator" /><span className="keyboard-hint">Arrow keys work, too</span><span className="mobile-key-hint">Tap a choice below the room</span></div>}
             <div className="save-status"><span className={saveError ? 'unsaved-dot' : 'saved-dot'} />{saveError ? 'Progress is not saving' : 'Your adventure saves as you go'}<span className="save-status-rule" /><span>Run #{String(game.runNumber).padStart(3, '0')}</span></div>
-            <p className="sr-only" role="status" aria-atomic="true">{room.name}. {game.journal.at(-1)?.text} Health {player.health} of {player.maxHealth}. {player.gold} gold.</p>
+            <p className="sr-only" role="status" aria-atomic="true">{presentation.name}. Health {player.health} of {player.maxHealth}. Mana {player.mana} of {player.maxMana}. {player.gold} gold.</p>
           </main>
 
           <aside className="journey-panel" aria-label="Adventure overview">
             <header className="panel-heading"><h2>Your journey</h2><span>Chapter {['I', 'II', 'III'][game.floor - 1]}</span></header>
-            <div className="journey-location"><span className="location-icon"><Map size={18} /></span><div><strong>{region.dungeon}</strong><span>{game.deck.length} rooms to discover</span></div></div>
+            <div className="journey-location"><span className="location-icon"><Map size={18} /></span><div><strong>{game.roomIndex === 0 ? 'An uncharted path' : region.dungeon}</strong><span>{game.deck.length} rooms to discover</span></div></div>
             <Journey game={game} compact />
             <button className="text-button map-link" onClick={() => setPanel('map')}>View the full map<ArrowRight size={13} /></button>
             <div className="aside-divider" />
             <header className="panel-heading notes-heading"><h2>Field notes</h2><BookOpen size={16} /></header>
             <Journal game={game} compact />
             <button className="text-button" onClick={() => setPanel('journal')}>Open your journal<ArrowRight size={13} /></button>
-            <div className="advice-card"><ScrollText size={21} strokeWidth={1.2} /><p>{ADVICE[room.kind]}</p><span>A word to the wanderer</span></div>
+            <div className="advice-card"><ScrollText size={21} strokeWidth={1.2} /><p>{presentation.known ? ADVICE[room.kind] : 'Keep your blade close. The darkness is not empty.'}</p><span>A word to the wanderer</span></div>
           </aside>
         </div>
       </div>
+
+      {game.dialogue && <Modal restoreFocusTo={dialogTrigger.current} title={room.name} eyebrow="A voice beside the fire" onClose={() => act({ type: 'CLOSE_DIALOGUE' })} className="dialogue-modal">
+        <div className="dialogue-portrait"><Portrait large /><Flame size={19} /></div>
+        <p className="dialogue-line">{getDialogue(room.id).opening}</p>
+        <div className="dialogue-responses">{(['rumor', 'rest', 'trade'] as const).map((response) => {
+          const option = getDialogue(room.id).responses[response]
+          return <button className="dialogue-response" key={response} disabled={response === 'trade' && (player.gold < 20 || player.potions >= 1000)} onClick={() => act({ type: 'RESPOND_NPC', response })}><span><strong>{option.label}</strong><small>{option.hint}</small></span><ArrowRight size={16} /></button>
+        })}</div>
+        <p className="modal-footnote">A shared story can change how you face what waits ahead.</p>
+      </Modal>}
+
+      {game.omen && <Modal restoreFocusTo={dialogTrigger.current} title="Something answers." eyebrow="The hidden inscription" onClose={() => act({ type: 'RESOLVE_OMEN', accept: false })} className="omen-modal">
+        <div className="omen-glyph" aria-hidden="true"><span /><Eye size={45} /><span /></div>
+        <p className="dialogue-line">The letters move when you look away. A whisper offers strength, insight, or something it refuses to name.</p>
+        <p className="omen-price"><Heart size={15} />Offer 4 health. A curse may take 10 more.</p>
+        <div className="omen-choices"><button className="outline-button" onClick={() => act({ type: 'RESOLVE_OMEN', accept: false })}>Leave it untouched</button><button className="gold-button" onClick={() => act({ type: 'RESOLVE_OMEN', accept: true })}>Accept the bargain<ArrowRight size={15} /></button></div>
+        <p className="modal-footnote">A blessing may grant strength, wisdom, gold, or mana. This inscription offers its bargain only once.</p>
+      </Modal>}
 
       {game.puzzle && <Modal restoreFocusTo={dialogTrigger.current} title="The rune lock" eyebrow="A little dexterity. A little patience." onClose={() => act({ type: 'CLOSE_PUZZLE' })} className="puzzle-modal">
         <p className="modal-description">Match the symbols from left to right. A wrong symbol costs 4 health. Three mistakes jam the lock.</p>
@@ -392,15 +454,27 @@ export default function App() {
         <div className="character-stats"><div><Swords /><strong>{player.strength}</strong><span>Strength</span></div><div><Feather /><strong>{player.dexterity}</strong><span>Dexterity</span></div><div><Eye /><strong>{player.wisdom}</strong><span>Wisdom</span></div></div>
         <div className="character-level"><span>Level {player.level}</span><span>{player.level === 10 ? 'Maximum level' : `${player.xp} / ${experienceTarget(player.level)} XP to the next level`}</span></div>
         <progress className="character-xp" aria-label="Character experience" max={player.level === 10 ? 1 : experienceTarget(player.level)} value={player.level === 10 ? 1 : player.xp} />
-        <p className="modal-footnote">Strength reduces combat damage. Dexterity helps you sneak and unlock chests. Wisdom improves rest and boss preparation.</p>
+        <p className="modal-footnote">Strength makes your strikes stronger. Dexterity helps you dodge, sneak, and unlock chests. Wisdom fuels your spells and the strength of your wards.</p>
         <button className="outline-button full-width" onClick={() => { setNextClass(player.classId); setPanel('restart') }}><UserRound size={16} />Choose a class for a new adventure</button>
       </Modal>}
 
       {panel === 'inventory' && <Modal restoreFocusTo={dialogTrigger.current} title="Your satchel" eyebrow="A few things between you and the dark" onClose={() => setPanel(null)}>
-        <div className="inventory-item"><span className="item-icon"><FlaskConical size={24} /></span><div><h3>Healing tonic <span className="item-count">x{player.potions}</span></h3><p>Restores up to 24 health. A little courage in a bottle.</p></div><button className="outline-button" disabled={game.status !== 'active' || game.puzzle !== null || player.potions === 0 || player.health === player.maxHealth} onClick={() => act({ type: 'DRINK_POTION' })}>Drink</button></div>
+        <div className="inventory-item"><span className="item-icon"><FlaskConical size={24} /></span><div><h3>Healing tonic <span className="item-count">x{player.potions}</span></h3><p>Restores up to 24 health. A little courage in a bottle.</p></div><button className="outline-button" aria-label="Drink healing tonic" disabled={game.status !== 'active' || game.puzzle !== null || player.potions === 0 || player.health === player.maxHealth} onClick={() => act({ type: 'DRINK_POTION' })}>Drink</button></div>
+        <div className="inventory-item"><span className="item-icon aether-icon"><WandSparkles size={24} /></span><div><h3>Aether vial <span className="item-count">x{player.aether}</span></h3><p>Restores up to 14 mana. A stolen breath of starlight.</p></div><button className="outline-button" aria-label="Drink aether vial" disabled={game.status !== 'active' || game.puzzle !== null || player.aether === 0 || player.mana === player.maxMana} onClick={() => act({ type: 'DRINK_AETHER' })}>Drink</button></div>
         <h3 className="inventory-heading">Equipped relics<span>{player.relics.length} / 3</span></h3>
         {player.relics.length === 0 ? <div className="empty-satchel"><Backpack size={30} strokeWidth={1.2} /><p>No relics. Yet.</p><span>Search chests and visit shops to find something worth carrying.</span></div> : player.relics.map((id) => { const Icon = RELIC_ICONS[id]; return <div className="inventory-item relic-item" key={id}><span className="item-icon"><Icon size={24} /></span><div><h3>{RELICS[id].name}</h3><p>{RELICS[id].effect}</p><span className="relic-flavor">{RELICS[id].description}</span></div><span className="equipped-label"><Check size={12} />Equipped</span></div> })}
-        <p className="modal-footnote">Relics apply automatically and last for this run. A new adventure starts with a fresh satchel.</p>
+        <p className="modal-footnote">Drinking in battle spends your turn. Relics apply automatically and last for this run. A new adventure starts with a fresh satchel.</p>
+      </Modal>}
+
+      {panel === 'spells' && <Modal restoreFocusTo={dialogTrigger.current} title="Your grimoire" eyebrow={`${player.mana} / ${player.maxMana} mana`} onClose={() => setPanel(null)} className="grimoire-modal">
+        <p className="modal-description">Five words the darkness would rather you forgot. Wisdom strengthens your magic; every spell spends mana.</p>
+        <div className="grimoire-spells">{SPELL_IDS.map((id) => {
+          const definition = SPELLS[id]
+          const Icon = SPELL_ICONS[id]
+          const reason = spellUnavailable(game, id)
+          return <div className={`grimoire-spell spell-${id}`} key={id}><span className="grimoire-icon"><Icon size={23} /></span><div><h3>{definition.name}<span>{definition.cost} mana</span></h3><p>{definition.description}</p></div><button className="outline-button" aria-label={`Cast ${definition.name.toLowerCase()}`} disabled={animating || Boolean(reason)} title={reason ?? definition.description} onClick={() => { setPanel(null); act({ type: 'CAST_SPELL', spell: id }) }}>Cast</button></div>
+        })}</div>
+        <p className="modal-footnote">Offensive spells and wards need an active fight. Mending works on the road, too. In battle, keys 1-5 cast; P drinks a tonic and A drinks aether.</p>
       </Modal>}
 
       {panel === 'journal' && <Modal restoreFocusTo={dialogTrigger.current} title="The story so far" eyebrow={`Field notes / Run #${String(game.runNumber).padStart(3, '0')}`} onClose={() => setPanel(null)}>
@@ -409,23 +483,23 @@ export default function App() {
       </Modal>}
 
       {panel === 'map' && <Modal restoreFocusTo={dialogTrigger.current} title="A road into the unknown" eyebrow="Your journey" onClose={() => setPanel(null)} className="map-modal">
-        <div className="region-list">{REGIONS.map((entry) => <div className={`map-region ${entry.floor === game.floor ? 'active' : ''}`} key={entry.floor}><span>{entry.floor < game.floor || game.status === 'won' ? <Check size={18} /> : entry.floor === game.floor ? <Compass size={18} /> : <Shield size={18} />}</span><div><h3>{entry.name}</h3><p>{entry.dungeon}</p></div><small>{entry.floor < game.floor || game.status === 'won' ? 'Cleared' : entry.floor === game.floor ? 'Exploring' : 'Undiscovered'}</small></div>)}</div>
+        <div className="region-list">{REGIONS.map((entry) => <div className={`map-region ${entry.floor === game.floor ? 'active' : ''}`} key={entry.floor}><span>{entry.floor < game.floor || game.status === 'won' ? <Check size={18} /> : entry.floor === game.floor ? <Compass size={18} /> : <CircleHelp size={18} />}</span><div><h3>{entry.floor <= game.floor ? entry.name : 'Uncharted region'}</h3><p>{entry.floor <= game.floor ? entry.dungeon : '???'}</p></div><small>{entry.floor < game.floor || game.status === 'won' ? 'Cleared' : entry.floor === game.floor ? 'Exploring' : 'Undiscovered'}</small></div>)}</div>
         <h3 className="inventory-heading">Your current path<span>{game.roomIndex + 1} / {game.deck.length}</span></h3><Journey game={game} />
         <div className="map-records"><span>Best floor<strong>{save.records.bestFloor} / 3</strong></span><span>Completed adventures<strong>{save.records.wins}</strong></span><span>Run seed<strong>{game.seed.toString(16).toUpperCase()}</strong></span></div>
       </Modal>}
 
       {panel === 'help' && <Modal restoreFocusTo={dialogTrigger.current} title="One more scroll." eyebrow="How to play" onClose={() => setPanel(null)}>
         <p className="modal-description">A dungeon crawler that moves like your feed. Make a choice, meet the next room, and see how far you get.</p>
-        <div className="help-controls"><div><ArrowUp /><span><strong>Swipe up or scroll down</strong>Explore, attack, or open a chest.</span></div><div><ArrowLeft /><span><strong>Swipe left</strong>Talk, sneak past, or take another path.</span></div><div><ArrowRight /><span><strong>Swipe right</strong>Search, trade, escape, or study a boss.</span></div></div>
-        <p className="modal-description">Every room has its own choices. The three buttons tell you exactly what each gesture does. Arrow keys work too; press P to drink a tonic.</p>
-        <div className="help-rules"><p><Heart size={17} /><span><strong>Keep your light alive.</strong> At zero health, your run ends. Tonics and wells restore health.</span></p><p><Skull size={17} /><span><strong>Three floors. Three guardians.</strong> Bosses cannot be skipped. Defeat the last one to escape.</span></p><p><Backpack size={17} /><span><strong>A different path every time.</strong> Routes, rewards, and fights are seeded. Relics and levels last for one run.</span></p><p><Eye size={17} /><span><strong>Chests like nimble fingers.</strong> Dexterity 8 bypasses rune locks. Otherwise, solve the three-symbol puzzle.</span></p></div>
+        <div className="help-controls"><div><ArrowUp /><span><strong>Swipe up or scroll down</strong>Explore, approach a foe, or strike in battle.</span></div><div><ArrowLeft /><span><strong>Swipe left</strong>Talk, sneak past, or guard in battle.</span></div><div><ArrowRight /><span><strong>Swipe right</strong>Reveal, trade, escape, or dodge in battle.</span></div></div>
+        <p className="modal-description">Every room has its own choices. Tap glowing discoveries to talk, inspect an inscription, or open a chest. Arrow keys work too; keys 1-5 cast spells, P drinks a tonic, and A drinks aether.</p>
+        <div className="help-rules"><p><Heart size={17} /><span><strong>Keep your light alive.</strong> At zero health, your run ends. Tonics and spells restore health, but drinking in battle spends a turn.</span></p><p><Swords size={17} /><span><strong>Read the enemy's next move.</strong> Guard to soften blows and regain mana. Dodge physical attacks. Use wards against curses and spells against raised guards.</span></p><p><Skull size={17} /><span><strong>A guardian has a second face.</strong> Bosses awaken into another phase at half health. No single attack can finish both phases.</span></p><p><Backpack size={17} /><span><strong>Leave room for the unknown.</strong> Unidentified rooms stay hidden on your map, even if you sneak past them. Relics and levels last for one run.</span></p><p><Eye size={17} /><span><strong>Chests like nimble fingers.</strong> Dexterity 8 bypasses rune locks. Otherwise, solve the three-symbol puzzle.</span></p></div>
         <button className="gold-button full-width" onClick={() => setPanel(null)}>Back to the adventure<ArrowRight size={16} /></button>
       </Modal>}
 
       {panel === 'settings' && <Modal restoreFocusTo={dialogTrigger.current} title="Make yourself at home" eyebrow="Settings" onClose={() => setPanel(null)}>
         <label className="setting-row"><span><strong>Sound effects</strong><small>Quiet, retro tones for your choices.</small></span><input type="checkbox" checked={save.settings.sound} onChange={toggleSound} /></label>
         <label className="setting-row"><span><strong>Gesture hints</strong><small>Show the scrolling and keyboard guide.</small></span><input type="checkbox" checked={save.settings.hints} onChange={(event) => { const hints = event.currentTarget.checked; setSave((current) => ({ ...current, settings: { ...current.settings, hints } })) }} /></label>
-        <p className="modal-footnote">Motion follows your device's reduced-motion setting. Progress and preferences stay in this browser. No account, tracking, or cloud save.</p>
+        <p className="modal-footnote">Atmosphere, creature movement, and spell effects follow your device's reduced-motion setting. Background animation pauses in hidden tabs and behind dialogs. Progress stays in this browser.</p>
         <button className="outline-button full-width" onClick={() => { setNextClass(player.classId); setPanel('restart') }}><Plus size={16} />Start a new adventure</button>
       </Modal>}
 

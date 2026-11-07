@@ -42,7 +42,7 @@ export function createRun(seed: number, classId: ClassId = 'wanderer', runNumber
     seed: normalizedSeed, rng, runNumber, floor: 1, roomIndex: 0, deck,
     status: 'active', roomsCleared: 0, studied: false, puzzle: null,
     discovered: ['ashen-gate'], searched: [], combat: null, dialogue: false, omen: null,
-    feedback: { id: 0, type: 'travel', enemyDamage: 0, playerDamage: 0, healing: 0, text: 'Your story begins.' },
+    feedback: { id: 0, type: 'travel', actionType: 'travel', enemyDamage: 0, playerDamage: 0, healing: 0, text: 'Your story begins.' },
     player: {
       classId, ...stats, health: stats.maxHealth,
       gold: 38, xp: 0, level: 1, potions: 2, relics: [],
@@ -414,7 +414,7 @@ export function getChoices(game: GameState): Choice[] {
   }
   if (game.combat) {
     return [
-      { direction: 'left', label: 'Guard', hint: 'Block damage / +3 mana' },
+      { direction: 'left', label: 'Guard', hint: 'Defend / +3 MP' },
       { direction: 'up', label: 'Strike', hint: `STR ${strength}${game.combat.opening ? ' / Counter ready' : ''}` },
       { direction: 'right', label: 'Dodge', hint: `DEX ${dexterity}` },
     ]
@@ -633,11 +633,7 @@ function resolveAction(game: GameState, action: GameAction): GameState {
   }
 }
 
-function effectFor(before: GameState, after: GameState, action: GameAction): EffectType {
-  if (after.floor !== before.floor || after.roomIndex !== before.roomIndex) return 'travel'
-  if (after.combat?.result === 'victory' && before.combat?.result !== 'victory') return 'victory'
-  if (after.combat?.phase === 2 && before.combat?.phase === 1) return 'phase'
-  if (after.discovered.length > before.discovered.length) return 'reveal'
+function actionEffect(before: GameState, after: GameState, action: GameAction): EffectType {
   if (action.type === 'CAST_SPELL' && !spellUnavailable(before, action.spell)) {
     const types: Record<SpellId, EffectType> = {
       'ember-bolt': 'ember', 'frost-bind': 'frost', 'storm-lance': 'storm', 'arcane-ward': 'ward', 'mending-light': 'heal',
@@ -653,16 +649,26 @@ function effectFor(before: GameState, after: GameState, action: GameAction): Eff
   return 'info'
 }
 
+function effectFor(before: GameState, after: GameState, actionType: EffectType): EffectType {
+  if (after.floor !== before.floor || after.roomIndex !== before.roomIndex) return 'travel'
+  if (after.combat?.result === 'victory' && before.combat?.result !== 'victory') return 'victory'
+  if (after.combat?.phase === 2 && before.combat?.phase === 1) return 'phase'
+  if (after.discovered.length > before.discovered.length) return 'reveal'
+  return actionType
+}
+
 export function gameReducer(game: GameState, action: GameAction): GameState {
   const next = resolveAction(game, action)
   if (next === game) return game
   const lastId = game.journal.at(-1)?.id ?? 0
   const text = next.journal.filter((entry) => entry.id > lastId).map((entry) => entry.text).join(' ').slice(0, 500)
+  const actionType = actionEffect(game, next, action)
   return {
     ...next,
     feedback: {
       id: game.feedback.id + 1,
-      type: effectFor(game, next, action),
+      type: effectFor(game, next, actionType),
+      actionType,
       enemyDamage: game.combat && next.combat ? Math.max(0, game.combat.health - next.combat.health) : 0,
       playerDamage: Math.max(0, game.player.health - next.player.health),
       healing: Math.max(0, next.player.health - game.player.health),

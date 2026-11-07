@@ -10,7 +10,7 @@ export function useRoomGestures(onDirection: (direction: Direction) => void, ena
 
   useEffect(() => {
     const target = element.current
-    if (!target || !enabled) return
+    if (!target) return
     const handleWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.metaKey) return
       event.preventDefault()
@@ -22,7 +22,7 @@ export function useRoomGestures(onDirection: (direction: Direction) => void, ena
         current.axis = ''
       }
       current.last = now
-      if (current.locked) return
+      if (current.locked || !enabled) return
       const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY)
       const delta = horizontal ? event.deltaX : event.deltaY
       if (!horizontal && delta <= 0) return

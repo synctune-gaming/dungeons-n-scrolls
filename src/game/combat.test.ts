@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createRun, gameReducer, getChoices } from './engine'
+import { createRun, gameReducer, getChoices, getRoom, spellUnavailable } from './engine'
+import { CLASS_IDS } from './types'
 import type { GameState, Player, RoomId } from './types'
 
 function inRoom(id: RoomId, player: Partial<Player> = {}): GameState {
@@ -187,6 +188,15 @@ describe('a real grimoire', () => {
 })
 
 describe('guardians with a second act', () => {
+  it('keeps the spell effect as well as the phase-break effect', () => {
+    const game = start('hollow-king', { wisdom: 100 })
+    const cast = gameReducer(game, { type: 'CAST_SPELL', spell: 'frost-bind' })
+    expect(cast.combat?.phase).toBe(2)
+    expect(cast.combat?.health).toBeGreaterThan(0)
+    expect(cast.feedback.type).toBe('phase')
+    expect(cast.feedback.actionType).toBe('frost')
+  })
+
   it('breaks into a new phase instead of dying to one overpowered hit', () => {
     const game = start('hollow-king', { strength: 100 })
     const hit = choose(game)
@@ -227,6 +237,56 @@ describe('things beyond the blade', () => {
     expect(answered.player.maxMana).toBe(game.player.maxMana + 2)
     expect(answered.roomIndex).toBe(game.roomIndex + 1)
     expect(gameReducer(answered, { type: 'RESPOND_NPC', response: 'rumor' })).toBe(answered)
+  })
+
+  describe('a survivable adventure, not just a combat demo', () => {
+    it('lets every unmodified class escape by reading intentions and managing supplies', () => {
+      for (const classId of CLASS_IDS) {
+        let victories = 0
+        for (let seed = 1; seed <= 8; seed += 1) {
+          let game = createRun(seed, classId)
+          for (let step = 0; step < 250 && game.status === 'active'; step += 1) {
+            const room = getRoom(game)
+            if (game.puzzle) {
+              const rune = game.puzzle.combination[game.puzzle.progress]
+              if (!rune) throw new Error('The adventurer found an incomplete lock.')
+              game = gameReducer(game, { type: 'PICK_RUNE', rune })
+            } else if (game.dialogue) {
+              game = gameReducer(game, { type: 'RESPOND_NPC', response: 'rest' })
+            } else if (game.combat?.result === 'victory') {
+              game = choose(game)
+            } else if (game.combat) {
+              const combat = game.combat
+              if (game.player.health < game.player.maxHealth * 0.45 && game.player.potions > 0) {
+                game = gameReducer(game, { type: 'DRINK_POTION' })
+              } else if (game.player.health < game.player.maxHealth * 0.45 && !spellUnavailable(game, 'mending-light')) {
+                game = gameReducer(game, { type: 'CAST_SPELL', spell: 'mending-light' })
+              } else if (game.player.mana < 6 && game.player.aether > 0) {
+                game = gameReducer(game, { type: 'DRINK_AETHER' })
+              } else if (combat.frozenTurns > 0) {
+                game = choose(game)
+              } else if ((combat.intent === 'heavy' || combat.intent === 'hex') && combat.ward < 8 && !spellUnavailable(game, 'arcane-ward')) {
+                game = gameReducer(game, { type: 'CAST_SPELL', spell: 'arcane-ward' })
+              } else if (room.kind === 'combat' || room.kind === 'boss') {
+                const spell = room.enemy.weakness === 'frost' ? 'frost-bind' : room.enemy.weakness === 'fire' ? 'ember-bolt' : 'storm-lance'
+                if (!spellUnavailable(game, spell)) game = gameReducer(game, { type: 'CAST_SPELL', spell })
+                else game = choose(game, combat.intent === 'heavy' || combat.intent === 'hex' ? 'left' : 'up')
+              }
+            } else if (room.kind === 'npc') {
+              game = choose(game, 'left')
+            } else if (room.kind === 'shop' && game.player.aether < 2 && game.player.gold >= 12) {
+              game = gameReducer(game, { type: 'BUY_AETHER' })
+            } else if (room.kind === 'shop' && game.player.potions < 3 && game.player.gold >= 15) {
+              game = choose(game, 'left')
+            } else {
+              game = choose(game)
+            }
+          }
+          if (game.status === 'won') victories += 1
+        }
+        expect(victories, `${classId} needs a viable path with normal starting stats`).toBeGreaterThan(0)
+      }
+    })
   })
 
   it('can leave a conversation without losing the room', () => {

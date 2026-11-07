@@ -2,7 +2,7 @@
 
 A first-person, pixel-art roguelike that moves like your feed. Scroll into the next room, swipe to make a choice, and see whether the dungeon gives you treasure or a new reason to start over.
 
-Three classes, three regions, quick stat-based fights, wandering NPCs, shops, relics, and rune-locked chests. Every run has a seeded route. Your adventure saves in your browser.
+Three classes, five spells, turn-based fights, and guardians with a second phase. Unidentified rooms stay hidden until you discover them. Talk with wanderers, investigate strange inscriptions, trade for supplies, and open rune-locked chests. Animated pixel scenes bring each seeded run to life; your adventure saves in your browser.
 
 ## Play locally
 

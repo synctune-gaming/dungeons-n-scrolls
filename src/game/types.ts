@@ -142,6 +142,7 @@ const combatSchema = z.object({
 const feedbackSchema = z.object({
   id: integer(0),
   type: z.enum(EFFECT_IDS),
+  actionType: z.enum(EFFECT_IDS).default('info'),
   enemyDamage: integer(0),
   playerDamage: integer(0),
   healing: integer(0),
