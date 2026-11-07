@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRun, gameReducer, getChoices, getRoom } from './engine'
 import { loadSave, SAVE_KEY, writeSave } from './persistence'
+import { CLASS_IDS, savedGameSchema } from './types'
 import type { GameState, Player, RoomId, SavedGame } from './types'
 
 function encounter(id: RoomId, player: Partial<Player> = {}): GameState {
@@ -99,6 +100,12 @@ describe('quick combat and choices', () => {
     expect(bought.player.gold).toBe(game.player.gold - 15)
     expect(bought.roomIndex).toBe(0)
     expect(choose(bought).roomIndex).toBe(1)
+  })
+
+  it('respects satchel capacity when trading with an NPC', () => {
+    const game = encounter('lost-pilgrim', { potions: 1000 })
+    expect(choose(game, 'right').player).toEqual(game.player)
+    expect(getChoices(game).find((choice) => choice.direction === 'right')?.disabled).toBe(true)
   })
 
   it('cannot farm a purchased relic', () => {
@@ -250,5 +257,28 @@ describe('saved adventures', () => {
     }
     expect(loadSave(blocked).error).toContain('saved')
     expect(writeSave(save, blocked)).toContain('save')
+  })
+
+  it('keeps every intermediate state saveable across classes and varied seeded choices', () => {
+    for (const classId of CLASS_IDS) {
+      for (let seed = 1; seed <= 30; seed += 1) {
+        let game = createRun(seed, classId)
+        for (let step = 0; step < 80 && game.status === 'active'; step += 1) {
+          if (game.puzzle) {
+            const rune = game.puzzle.combination[game.puzzle.progress]
+            if (!rune) throw new Error('The test run has an incomplete puzzle.')
+            game = gameReducer(game, { type: 'PICK_RUNE', rune })
+          } else if (game.player.health < game.player.maxHealth / 2 && game.player.potions > 0) {
+            game = gameReducer(game, { type: 'DRINK_POTION' })
+          } else {
+            const choices = getChoices(game).filter((choice) => !choice.disabled)
+            const choice = choices[(seed + step) % choices.length]
+            if (!choice) throw new Error('The test run has no available choices.')
+            game = choose(game, choice.direction)
+          }
+          expect(savedGameSchema.safeParse({ ...save, game }).success).toBe(true)
+        }
+      }
+    }
   })
 })

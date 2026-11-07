@@ -200,7 +200,7 @@ export function getChoices(game: GameState): Choice[] {
     case 'npc': return [
       { direction: 'left', label: 'Talk', hint: `WIT ${wisdom}` },
       { direction: 'up', label: 'Move on', hint: 'Keep exploring' },
-      { direction: 'right', label: 'Trade', hint: 'Tonic / 20 gold', disabled: gold < 20 },
+      { direction: 'right', label: 'Trade', hint: potions >= 1000 ? 'Satchel full' : 'Tonic / 20 gold', disabled: gold < 20 || potions >= 1000 },
     ]
     case 'treasure': return [
       { direction: 'left', label: 'Leave it', hint: 'Keep exploring' },
@@ -278,6 +278,7 @@ export function gameReducer(game: GameState, action: GameAction): GameState {
       if (direction === 'up') return advance(log(game, 'You exchange a nod and follow the road.'))
       if (direction === 'right') {
         if (game.player.gold < 20) return log(game, 'You need 20 gold to trade for a tonic.', 'danger')
+        if (game.player.potions >= 1000) return log(game, 'Your satchel cannot hold another tonic.', 'danger')
         return advance(log({ ...game, player: { ...game.player, gold: game.player.gold - 20, potions: game.player.potions + 1 } }, 'A fair trade. -20 gold, +1 healing tonic.', 'good'))
       }
       const [next, gold] = roll(game, 6, 12)

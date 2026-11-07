@@ -118,6 +118,7 @@ export default function App() {
   const [nextClass, setNextClass] = useState<ClassId>(save.game.player.classId)
   const [lastDirection, setLastDirection] = useState<Direction>('up')
   const audio = useRef<AudioContext | null>(null)
+  const dialogTrigger = useRef<HTMLElement | null>(null)
   const game = save.game
   const player = game.player
   const room = getRoom(game)
@@ -174,8 +175,12 @@ export default function App() {
     playSound()
   }, [playSound])
 
-  const choose = useCallback((direction: Direction) => {
+  const choose = useCallback((direction: Direction, trigger?: HTMLElement) => {
     if (blocked) return
+    const focused = document.activeElement
+    dialogTrigger.current = trigger ?? (
+      focused instanceof HTMLElement && focused !== document.body ? focused : document.getElementById('room-title')
+    )
     setLastDirection(direction)
     act({ type: 'CHOOSE', direction })
   }, [act, blocked])
@@ -229,7 +234,11 @@ export default function App() {
   const warning = saveError ?? notice
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" onClickCapture={(event) => {
+      // Safari does not focus tapped buttons; remember the actual dialog opener.
+      const trigger = event.target instanceof Element ? event.target.closest('button') : null
+      if (trigger instanceof HTMLElement) dialogTrigger.current = trigger
+    }}>
       <a className="skip-link" href="#adventure">Skip to adventure</a>
       <aside className="sidebar">
         <a className="brand" href="#adventure" aria-label="Dungeons and Scrolls adventure">
@@ -337,7 +346,7 @@ export default function App() {
               <div className="choice-buttons" role="group" aria-label="Choose your next move">
                 {choices.map((choice) => {
                   const Icon = DIRECTIONS[choice.direction]
-                  return <button key={choice.direction} className={`choice-button ${choice.direction === 'up' ? 'primary-choice' : ''}`} aria-label={choice.label} disabled={choice.disabled || blocked} onClick={() => choose(choice.direction)}>
+                  return <button key={choice.direction} className={`choice-button ${choice.direction === 'up' ? 'primary-choice' : ''}`} aria-label={choice.label} disabled={choice.disabled || blocked} onClick={(event) => choose(choice.direction, event.currentTarget)}>
                     <span className="choice-key"><Icon size={15} /><span>{choice.direction === 'up' ? 'Swipe up' : `Swipe ${choice.direction}`}</span></span><strong>{choice.label}</strong><small>{choice.hint}</small>
                   </button>
                 })}
@@ -368,7 +377,7 @@ export default function App() {
         </div>
       </div>
 
-      {game.puzzle && <Modal title="The rune lock" eyebrow="A little dexterity. A little patience." onClose={() => act({ type: 'CLOSE_PUZZLE' })} className="puzzle-modal">
+      {game.puzzle && <Modal restoreFocusTo={dialogTrigger.current} title="The rune lock" eyebrow="A little dexterity. A little patience." onClose={() => act({ type: 'CLOSE_PUZZLE' })} className="puzzle-modal">
         <p className="modal-description">Match the symbols from left to right. A wrong symbol costs 4 health. Three mistakes jam the lock.</p>
         <ol className="rune-sequence" aria-label="Rune combination">
           {game.puzzle.combination.map((rune, index) => { const Icon = RUNE_ICONS[rune]; return <li key={rune} className={index < (game.puzzle?.progress ?? 0) ? 'matched' : ''}><span>{index + 1}</span><Icon size={29} /><span>{rune}</span>{index < (game.puzzle?.progress ?? 0) && <Check size={12} />}</li> })}
@@ -378,7 +387,7 @@ export default function App() {
         <button className="text-button puzzle-cancel" onClick={() => act({ type: 'CLOSE_PUZZLE' })}>Leave the lock for now<ArrowRight size={14} /></button>
       </Modal>}
 
-      {panel === 'character' && <Modal title={`The ${CLASSES[player.classId].name}`} eyebrow="Your adventurer" onClose={() => setPanel(null)}>
+      {panel === 'character' && <Modal restoreFocusTo={dialogTrigger.current} title={`The ${CLASSES[player.classId].name}`} eyebrow="Your adventurer" onClose={() => setPanel(null)}>
         <div className="character-profile"><Portrait large /><div><p className="character-motto">{CLASSES[player.classId].title}</p><p className="modal-description">{CLASSES[player.classId].description}</p></div></div>
         <div className="character-stats"><div><Swords /><strong>{player.strength}</strong><span>Strength</span></div><div><Feather /><strong>{player.dexterity}</strong><span>Dexterity</span></div><div><Eye /><strong>{player.wisdom}</strong><span>Wisdom</span></div></div>
         <div className="character-level"><span>Level {player.level}</span><span>{player.level === 10 ? 'Maximum level' : `${player.xp} / ${experienceTarget(player.level)} XP to the next level`}</span></div>
@@ -387,25 +396,25 @@ export default function App() {
         <button className="outline-button full-width" onClick={() => { setNextClass(player.classId); setPanel('restart') }}><UserRound size={16} />Choose a class for a new adventure</button>
       </Modal>}
 
-      {panel === 'inventory' && <Modal title="Your satchel" eyebrow="A few things between you and the dark" onClose={() => setPanel(null)}>
+      {panel === 'inventory' && <Modal restoreFocusTo={dialogTrigger.current} title="Your satchel" eyebrow="A few things between you and the dark" onClose={() => setPanel(null)}>
         <div className="inventory-item"><span className="item-icon"><FlaskConical size={24} /></span><div><h3>Healing tonic <span className="item-count">x{player.potions}</span></h3><p>Restores up to 24 health. A little courage in a bottle.</p></div><button className="outline-button" disabled={game.status !== 'active' || game.puzzle !== null || player.potions === 0 || player.health === player.maxHealth} onClick={() => act({ type: 'DRINK_POTION' })}>Drink</button></div>
         <h3 className="inventory-heading">Equipped relics<span>{player.relics.length} / 3</span></h3>
         {player.relics.length === 0 ? <div className="empty-satchel"><Backpack size={30} strokeWidth={1.2} /><p>No relics. Yet.</p><span>Search chests and visit shops to find something worth carrying.</span></div> : player.relics.map((id) => { const Icon = RELIC_ICONS[id]; return <div className="inventory-item relic-item" key={id}><span className="item-icon"><Icon size={24} /></span><div><h3>{RELICS[id].name}</h3><p>{RELICS[id].effect}</p><span className="relic-flavor">{RELICS[id].description}</span></div><span className="equipped-label"><Check size={12} />Equipped</span></div> })}
         <p className="modal-footnote">Relics apply automatically and last for this run. A new adventure starts with a fresh satchel.</p>
       </Modal>}
 
-      {panel === 'journal' && <Modal title="The story so far" eyebrow={`Field notes / Run #${String(game.runNumber).padStart(3, '0')}`} onClose={() => setPanel(null)}>
+      {panel === 'journal' && <Modal restoreFocusTo={dialogTrigger.current} title="The story so far" eyebrow={`Field notes / Run #${String(game.runNumber).padStart(3, '0')}`} onClose={() => setPanel(null)}>
         <Journal game={game} />
         <p className="modal-footnote">Your journal keeps the 30 most recent entries from this adventure.</p>
       </Modal>}
 
-      {panel === 'map' && <Modal title="A road into the unknown" eyebrow="Your journey" onClose={() => setPanel(null)} className="map-modal">
+      {panel === 'map' && <Modal restoreFocusTo={dialogTrigger.current} title="A road into the unknown" eyebrow="Your journey" onClose={() => setPanel(null)} className="map-modal">
         <div className="region-list">{REGIONS.map((entry) => <div className={`map-region ${entry.floor === game.floor ? 'active' : ''}`} key={entry.floor}><span>{entry.floor < game.floor || game.status === 'won' ? <Check size={18} /> : entry.floor === game.floor ? <Compass size={18} /> : <Shield size={18} />}</span><div><h3>{entry.name}</h3><p>{entry.dungeon}</p></div><small>{entry.floor < game.floor || game.status === 'won' ? 'Cleared' : entry.floor === game.floor ? 'Exploring' : 'Undiscovered'}</small></div>)}</div>
         <h3 className="inventory-heading">Your current path<span>{game.roomIndex + 1} / {game.deck.length}</span></h3><Journey game={game} />
         <div className="map-records"><span>Best floor<strong>{save.records.bestFloor} / 3</strong></span><span>Completed adventures<strong>{save.records.wins}</strong></span><span>Run seed<strong>{game.seed.toString(16).toUpperCase()}</strong></span></div>
       </Modal>}
 
-      {panel === 'help' && <Modal title="One more scroll." eyebrow="How to play" onClose={() => setPanel(null)}>
+      {panel === 'help' && <Modal restoreFocusTo={dialogTrigger.current} title="One more scroll." eyebrow="How to play" onClose={() => setPanel(null)}>
         <p className="modal-description">A dungeon crawler that moves like your feed. Make a choice, meet the next room, and see how far you get.</p>
         <div className="help-controls"><div><ArrowUp /><span><strong>Swipe up or scroll down</strong>Explore, attack, or open a chest.</span></div><div><ArrowLeft /><span><strong>Swipe left</strong>Talk, sneak past, or take another path.</span></div><div><ArrowRight /><span><strong>Swipe right</strong>Search, trade, escape, or study a boss.</span></div></div>
         <p className="modal-description">Every room has its own choices. The three buttons tell you exactly what each gesture does. Arrow keys work too; press P to drink a tonic.</p>
@@ -413,14 +422,14 @@ export default function App() {
         <button className="gold-button full-width" onClick={() => setPanel(null)}>Back to the adventure<ArrowRight size={16} /></button>
       </Modal>}
 
-      {panel === 'settings' && <Modal title="Make yourself at home" eyebrow="Settings" onClose={() => setPanel(null)}>
+      {panel === 'settings' && <Modal restoreFocusTo={dialogTrigger.current} title="Make yourself at home" eyebrow="Settings" onClose={() => setPanel(null)}>
         <label className="setting-row"><span><strong>Sound effects</strong><small>Quiet, retro tones for your choices.</small></span><input type="checkbox" checked={save.settings.sound} onChange={toggleSound} /></label>
         <label className="setting-row"><span><strong>Gesture hints</strong><small>Show the scrolling and keyboard guide.</small></span><input type="checkbox" checked={save.settings.hints} onChange={(event) => { const hints = event.currentTarget.checked; setSave((current) => ({ ...current, settings: { ...current.settings, hints } })) }} /></label>
         <p className="modal-footnote">Motion follows your device's reduced-motion setting. Progress and preferences stay in this browser. No account, tracking, or cloud save.</p>
         <button className="outline-button full-width" onClick={() => { setNextClass(player.classId); setPanel('restart') }}><Plus size={16} />Start a new adventure</button>
       </Modal>}
 
-      {panel === 'restart' && <Modal title={game.status === 'active' ? 'A different path awaits.' : 'Your next story starts here.'} eyebrow="New adventure" onClose={() => setPanel(null)}>
+      {panel === 'restart' && <Modal restoreFocusTo={dialogTrigger.current} title={game.status === 'active' ? 'A different path awaits.' : 'Your next story starts here.'} eyebrow="New adventure" onClose={() => setPanel(null)}>
         <p className="modal-description">{game.status === 'active' ? 'This ends your current run. Your gold, levels, and relics will reset; your best floor and completed adventures will stay.' : 'A fresh route, a full health bar, and another chance. Your best floor and completed adventures stay with you.'}</p>
         <fieldset className="class-picker"><legend>Choose your adventurer</legend>{CLASS_IDS.map((id) => <label key={id} className={nextClass === id ? 'selected' : ''}><input type="radio" name="class" value={id} checked={nextClass === id} onChange={() => setNextClass(id)} /><span><strong>{CLASSES[id].name}</strong><small>{CLASSES[id].title}</small><span className="class-numbers">HP {CLASSES[id].stats.maxHealth} <span>/</span> STR {CLASSES[id].stats.strength} <span>/</span> DEX {CLASSES[id].stats.dexterity}</span></span></label>)}</fieldset>
         <button className="gold-button full-width" onClick={newRun}>Begin a new adventure<ArrowRight size={17} /></button>

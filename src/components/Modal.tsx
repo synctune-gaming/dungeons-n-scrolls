@@ -2,11 +2,12 @@ import { useEffect, useId, useRef } from 'react'
 import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-export function Modal({ title, eyebrow, onClose, children, className = '' }: {
+export function Modal({ title, eyebrow, onClose, children, restoreFocusTo, className = '' }: {
   title: string
   eyebrow?: string
   onClose: () => void
   children: ReactNode
+  restoreFocusTo?: HTMLElement | null
   className?: string
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -14,11 +15,11 @@ export function Modal({ title, eyebrow, onClose, children, className = '' }: {
 
   useEffect(() => {
     const element = dialog.current
-    const trigger = document.activeElement
+    const trigger = restoreFocusTo ?? document.activeElement
     element?.showModal()
     return () => {
       element?.close()
-      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus()
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
       else document.getElementById('room-title')?.focus()
     }
   }, [])
