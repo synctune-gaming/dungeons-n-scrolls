@@ -67,8 +67,8 @@ describe('social save migration and integrity', () => {
     for (const game of [
       { ...save.game, lastSideTripAt: 5 },
       { ...save.game, giftClaims: ['mosskeeper'] },
-      { ...save.game, visit: { destinationId: 'cinderhaven', venueId: null, explored: false } },
-      { ...save.game, visit: { destinationId: 'mossmere', venueId: 'smith-forge', explored: false } },
+      { ...save.game, roomsCleared: 5, lastSideTripAt: 5, visit: { destinationId: 'cinderhaven', venueId: null } },
+      { ...save.game, roomsCleared: 5, lastSideTripAt: 5, visit: { destinationId: 'mossmere', venueId: 'smith-forge' } },
     ]) {
       expect(savedGameSchema.safeParse({ ...save, game }).success).toBe(false)
     }

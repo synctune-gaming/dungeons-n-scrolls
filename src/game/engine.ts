@@ -1,4 +1,4 @@
-import { CLASSES, getBossPattern, getDialogue, getEnemyPattern, getRegion, INTENTS, RELICS, ROOMS, SPELLS } from './content'
+import { CLASSES, getBossPattern, getDialogue, getEnemyPattern, getRegion, INTENTS, RELICS, ROOMS, SHOP_ITEMS, SPELLS } from './content'
 import { GIFTS } from '../social/content'
 import type { AdventurerId, GiftId } from '../social/types'
 import { INSCRIPTION_ROOM_IDS, NPC_ROOM_IDS, RELIC_IDS } from './types'
@@ -506,7 +506,7 @@ function respondToNpc(game: GameState, id: NpcRoomId, response: DialogueResponse
 
 export type ShopItem = 'tonic' | 'aether' | 'iron-charm'
 export function purchaseUnavailable(game: GameState, item: ShopItem): string | null {
-  const price = item === 'tonic' ? 15 : item === 'aether' ? 12 : 30
+  const price = SHOP_ITEMS[item].price
   if (item === 'iron-charm' && game.player.relics.includes('iron-charm')) return 'Your iron charm is already equipped.'
   if (game.player.gold < price) return `You need ${price} gold for ${item === 'tonic' ? 'a healing tonic' : item === 'aether' ? 'an aether vial' : 'the iron charm'}.`
   if ((item === 'tonic' && game.player.potions >= 1000) || (item === 'aether' && game.player.aether >= 1000)) return `Your satchel cannot hold another ${item === 'tonic' ? 'tonic' : 'aether vial'}.`

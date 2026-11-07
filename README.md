@@ -2,7 +2,9 @@
 
 A first-person, pixel-art roguelike that moves like your feed. Scroll into the next room, swipe to make a choice, and see whether the dungeon gives you treasure or a new reason to start over.
 
-Three classes, five spells, turn-based fights, and guardians with a second phase. Unidentified rooms stay hidden until you discover them. Talk with wanderers, investigate strange inscriptions, trade for supplies, and open rune-locked chests. Animated pixel scenes bring each seeded run to life; your adventure saves in your browser.
+Three classes, five spells, twelve rooms per floor, and guardians with a second phase. Light foes and tougher monsters need different tactics; unidentified encounters stay hidden until discovered. Animated pixel scenes bring each seeded run to life.
+
+Personalize your hero, follow fictional adventurers, browse their stories, and search for playable city or NPC side trips every five dungeon rooms. Preset-only chats offer free useful gifts and up to three small return-gift boosts per run. Everything saves in your browser, with no accounts or multiplayer backend.
 
 ## Play locally
 
@@ -13,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite, usually **http://localhost:5173**. Swipe up or scroll down to advance; swipe left or right for the choices shown below the room. Buttons and arrow keys work too.
+Open the local URL printed by Vite, usually **http://localhost:5173**. Use **Timeline**, **Search**, and **Profile** to navigate. Swipe or scroll on the active encounter to make a choice; buttons and arrow keys work too.
 
 ## Docs
 

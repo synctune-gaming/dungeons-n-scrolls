@@ -1,5 +1,12 @@
 import type { ClassId, DialogueResponse, Element, EnemyIntent, Player, RelicId, Room, RoomId, SpellId } from './types'
 import { REGION_ROOM_IDS } from './types'
+import type { ShopItem } from './engine'
+
+export const SHOP_ITEMS: Record<ShopItem, { name: string; price: number; effect: string }> = {
+  tonic: { name: 'Healing tonic', price: 15, effect: 'Restore up to 24 health when used.' },
+  aether: { name: 'Aether vial', price: 12, effect: 'Restore up to 14 mana when used.' },
+  'iron-charm': { name: 'Iron charm', price: 30, effect: '+8 max health and 2 armor. Equipped automatically.' },
+}
 
 export const CLASSES: Record<ClassId, {
   name: string

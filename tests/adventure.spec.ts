@@ -1,61 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test as base } from '@playwright/test'
-import type { Locator, Page } from '@playwright/test'
-import { createRun } from '../src/game/engine'
-import { ROOMS } from '../src/game/content'
+import { expect } from '@playwright/test'
 import { SAVE_KEY } from '../src/game/persistence'
-import type { Player, RoomId, SavedGame } from '../src/game/types'
-import { createSocialState } from '../src/social/types'
-
-const route: RoomId[] = [
-  'ashen-gate', 'crypt-skulk', 'lost-pilgrim', 'sealed-coffer',
-  'lantern-merchant', 'moon-well', 'bone-sentry', 'hollow-king',
-]
-
-const test = base.extend<{ activate: (target: Locator) => Promise<void> }>({
-  activate: async ({ hasTouch }, use) => {
-    await use((target) => hasTouch ? target.tap() : target.click())
-  },
-})
-
-const runtimeErrors = new WeakMap<Page, string[]>()
-
-test.beforeEach(({ page }) => {
-  const errors: string[] = []
-  runtimeErrors.set(page, errors)
-  page.on('pageerror', (error) => errors.push(error.message))
-})
-
-test.afterEach(({ page }) => {
-  expect(runtimeErrors.get(page)).toEqual([])
-})
-
-async function enter(page: Page, room: RoomId = 'ashen-gate', player: Partial<Player> = {}) {
-  const game = createRun(12345)
-  game.deck = [...route]
-  game.roomIndex = route.indexOf(room)
-  if (game.roomIndex < 0) throw new Error(`The test route has no ${room}.`)
-  game.roomsCleared = game.roomIndex
-  game.discovered = route.slice(0, game.roomIndex + 1).filter((id) => ROOMS[id].kind !== 'combat' && ROOMS[id].kind !== 'boss')
-  game.player = { ...game.player, ...player }
-  const save: SavedGame = {
-    version: 3, game, social: createSocialState(),
-    settings: { sound: false, hints: true },
-    records: { bestFloor: 1, wins: 0 },
-  }
-  await page.addInitScript(({ key, payload }) => {
-    if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(payload))
-  }, { key: SAVE_KEY, payload: save })
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
-}
-
-async function beginBattle(page: Page, activate: (target: Locator) => Promise<void>, room: RoomId = 'hollow-king', player: Partial<Player> = {}) {
-  await enter(page, room, player)
-  await activate(page.getByRole('button', { name: /^(Draw your blade|Begin the fight|Approach the presence|Challenge the boss)$/ }))
-  await expect(page.getByRole('progressbar', { name: 'Enemy health', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Strike', exact: true })).toBeEnabled()
-}
+import { beginBattle, enter, test } from './fixtures'
 
 test('shows an original scene with every choice reachable in the first viewport', async ({ page }, info) => {
   await enter(page)

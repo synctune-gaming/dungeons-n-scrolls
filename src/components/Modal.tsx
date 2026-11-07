@@ -1,13 +1,14 @@
 import { useEffect, useId, useRef } from 'react'
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { KeyboardEventHandler, ReactNode } from 'react'
 
-export function Modal({ title, eyebrow, onClose, children, restoreFocusTo, className = '' }: {
+export function Modal({ title, eyebrow, onClose, children, restoreFocusTo, onKeyDown, className = '' }: {
   title: string
   eyebrow?: string
   onClose: () => void
   children: ReactNode
   restoreFocusTo?: HTMLElement | null
+  onKeyDown?: KeyboardEventHandler<HTMLDialogElement>
   className?: string
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -29,6 +30,7 @@ export function Modal({ title, eyebrow, onClose, children, restoreFocusTo, class
       ref={dialog}
       className={`modal ${className}`}
       aria-labelledby={labelId}
+      onKeyDown={onKeyDown}
       onCancel={(event) => { event.preventDefault(); onClose() }}
       onClick={(event) => { if (event.target === event.currentTarget) onClose() }}
     >
