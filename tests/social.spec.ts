@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { enter, readSave, test } from './fixtures'
+import { enter, loadGame, readSave, test } from './fixtures'
+import { createRun } from '../src/game/engine'
 
 async function navigate(page: Page, activate: (target: Locator) => Promise<void>, name: 'Timeline' | 'Search' | 'Profile') {
   await activate(page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name, exact: true }))
@@ -203,4 +204,70 @@ test('keeps return gifts capped across conversations and expires them on a new r
   await expect(page.getByText('Expired / Previous run', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Claim trail ration from Mosskeeper', exact: true })).toHaveCount(0)
   expect((await readSave(page)).game.giftClaims).toEqual([])
+})
+
+test('reads past encounters with native scrolling and keys without playing a hidden room', async ({ page }) => {
+  await enter(page, 'ashen-gate', { dexterity: 100 })
+  for (const key of ['ArrowUp', 'ArrowLeft', 'ArrowUp']) {
+    await expect(page.getByRole('group', { name: 'Choose your next move' }).getByRole('button').first()).toBeEnabled()
+    await page.getByRole('main').getByRole('heading', { level: 2 }).first().focus()
+    await page.keyboard.press(key)
+  }
+  await expect(page.getByRole('region', { name: 'Past encounters' }).getByRole('article')).toHaveCount(3)
+  await expect(page.getByRole('group', { name: 'Choose your next move' }).getByRole('button').first()).toBeEnabled()
+  const before = await readSave(page)
+  await page.getByRole('region', { name: 'Past encounters' }).getByRole('article').last().scrollIntoViewIfNeeded()
+  await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight)
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+  })
+  expect(await page.evaluate(() => ({
+    bodyFocused: document.activeElement === document.body,
+    currentRoomOffscreen: (document.getElementById('room-title')?.getBoundingClientRect().bottom ?? 0) < 0,
+  }))).toEqual({ bodyFocused: true, currentRoomOffscreen: true })
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('p')
+  expect((await readSave(page)).game).toEqual(before.game)
+})
+
+test('explains and blocks using inventory supplies during a paused side trip', async ({ page, activate }) => {
+  await enter(page, 'moon-well', { health: 50, mana: 10 })
+  await navigate(page, activate, 'Search')
+  await activate(page.getByRole('button', { name: 'Visit Mossmere', exact: true }))
+  const before = await readSave(page)
+  await navigate(page, activate, 'Profile')
+  await activate(page.getByRole('button', { name: 'Open satchel', exact: true }))
+  const inventory = page.getByRole('dialog', { name: 'Your satchel', exact: true })
+  await expect(inventory.getByRole('button', { name: 'Drink healing tonic', exact: true })).toBeDisabled()
+  await expect(inventory.getByRole('button', { name: 'Drink aether vial', exact: true })).toBeDisabled()
+  await expect(inventory.getByText('Finish your side trip before drinking supplies.', { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  expect((await readSave(page)).game).toEqual(before.game)
+})
+
+test('starts a fresh twelve-room adventure with the guardian at the end', async ({ page, activate }, info) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  expect((await readSave(page)).game.deck).toHaveLength(12)
+  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  const map = page.getByRole('dialog', { name: 'A road into the unknown' })
+  await expect(map.getByRole('list', { name: 'Current floor route' }).getByRole('listitem')).toHaveCount(12)
+  await page.keyboard.press('Escape')
+  if (process.env.ARTIFACT_DIR) await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/${info.project.name}-new-run.png`, fullPage: true })
+})
+
+test('keeps a tough normal monster alive after approach and the first strike', async ({ page, activate }) => {
+  const game = createRun(12345)
+  game.roomIndex = game.deck.indexOf('grave-brute')
+  game.roomsCleared = game.roomIndex
+  await loadGame(page, game)
+  await expect(page.getByRole('heading', { name: 'A shape in the dark', exact: true })).toBeVisible()
+  await activate(page.getByRole('button', { name: 'Draw your blade', exact: true }))
+  await expect(page.getByRole('progressbar', { name: 'Enemy health', exact: true })).toHaveAttribute('value', '58')
+  await activate(page.getByRole('button', { name: 'Strike', exact: true }))
+  const after = await readSave(page)
+  expect(after.game.combat?.result).toBe('fighting')
+  expect(after.game.combat?.health).toBeGreaterThan(0)
+  expect(after.game.roomIndex).toBe(game.roomIndex)
+  expect(after.game.player.gold).toBe(game.player.gold)
 })

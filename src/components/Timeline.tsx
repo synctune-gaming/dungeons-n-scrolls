@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { ArrowLeft, ArrowRight, ArrowUp, Backpack, Coins, Compass, Crown, DoorOpen, Eye, Flame, FlaskConical, Heart, Map, Mouse, Sparkles, UserRound, Volume2, VolumeX, WandSparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { getRegion, ROOMS, ROOM_LABELS } from '../game/content'
@@ -56,6 +57,20 @@ export function Timeline({ save, blocked, interactionOpen, lastDirection, reduce
   const victorious = game.combat?.result === 'victory'
   const inscription = INSCRIPTION_ROOM_IDS.some((id) => id === room.id)
   const readInscription = game.searched.some((id) => id === room.id)
+  const copy = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+  const alignedFeedback = useRef<number | null>(null)
+  useEffect(() => {
+    if (!fighting || interactionOpen || alignedFeedback.current === game.feedback.id) return
+    alignedFeedback.current = game.feedback.id
+    const frame = requestAnimationFrame(() => {
+      if (!copy.current || !actions.current || getComputedStyle(actions.current).position !== 'fixed') return
+      const bottom = copy.current.getBoundingClientRect().bottom
+      const available = actions.current.getBoundingClientRect().top - 8
+      if (bottom > available) window.scrollBy(0, bottom - available)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [fighting, interactionOpen, game.feedback.id])
   return (
     <main id="adventure" tabIndex={-1} className={fighting ? 'combat-active' : victorious ? 'combat-won' : ''}>
       <StoriesStrip social={save.social} onOpen={onStory} />
@@ -86,7 +101,7 @@ export function Timeline({ save, blocked, interactionOpen, lastDirection, reduce
                 </div>}
                 {victorious && <div className="victory-reveal"><Crown size={23} /><strong>{room.kind === 'boss' ? 'The passage opens.' : 'The path is clear.'}</strong><span>Gold and experience collected</span></div>}
               </div>
-              <div className="room-copy"><div className="room-title-row"><h2 id="room-title" tabIndex={-1}>{presentation.name}</h2>{presentation.known && (room.kind === 'combat' || room.kind === 'boss') && <span className={`enemy-weakness weakness-${room.enemy.weakness}`}>Weak to {room.enemy.weakness}</span>}</div>
+              <div ref={copy} className="room-copy"><div className="room-title-row"><h2 id="room-title" tabIndex={-1}>{presentation.name}</h2>{presentation.known && (room.kind === 'combat' || room.kind === 'boss') && <span className={`enemy-weakness weakness-${room.enemy.weakness}`}>Weak to {room.enemy.weakness}</span>}</div>
                 {game.combat ? <CombatStatus game={game} /> : <p>{presentation.description}</p>}
                 {!game.combat && <div className="room-copy-footer"><span><span className="small-diamond" />{game.status === 'active' ? 'Your next move is yours.' : 'The story of this run is written.'}</span><span>{room.zone === 'overworld' ? 'Outside' : 'Inside'}<DoorOpen size={12} /></span></div>}
               </div>
@@ -101,7 +116,7 @@ export function Timeline({ save, blocked, interactionOpen, lastDirection, reduce
             <button className={`rail-button sound-rail ${save.settings.sound ? 'sound-active' : ''}`} aria-label={save.settings.sound ? 'Mute sound' : 'Enable sound'} aria-pressed={save.settings.sound} onClick={onToggleSound}>{save.settings.sound ? <Volume2 size={20} /> : <VolumeX size={20} />}<span>Sound</span></button>
           </div>
         </div>
-        {game.status === 'active' ? <div className={`encounter-actions ${fighting ? 'fighting-actions' : ''}`}>
+        {game.status === 'active' ? <div ref={actions} className={`encounter-actions ${fighting ? 'fighting-actions' : ''}`}>
           <div className={`choice-buttons ${choices.length === 1 ? 'single-choice' : ''}`} role="group" aria-label="Choose your next move">{choices.map((choice) => {
             const Icon = DIRECTIONS[choice.direction]
             return <div key={choice.direction} className={`choice-option ${choice.direction === 'up' ? 'primary-option' : ''}`}><button className={`choice-button ${choice.direction === 'up' ? 'primary-choice' : ''}`} aria-describedby={`choice-key-${choice.direction} choice-hint-${choice.direction}`} disabled={choice.disabled || blocked} onClick={(event) => onChoose(choice.direction, event.currentTarget)}><strong>{choice.label}</strong></button><span id={`choice-key-${choice.direction}`} className="choice-key"><Icon size={15} /><span>{choice.direction === 'up' ? 'Swipe up' : `Swipe ${choice.direction}`}</span></span><small id={`choice-hint-${choice.direction}`} className="choice-hint">{choice.hint}</small></div>

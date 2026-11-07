@@ -3,12 +3,18 @@ import { expect } from '@playwright/test'
 import { SAVE_KEY } from '../src/game/persistence'
 import { beginBattle, enter, test } from './fixtures'
 
-test('shows an original scene with every choice reachable in the first viewport', async ({ page }, info) => {
+test('shows an original scene with every choice reachable in the first viewport', async ({ page, isMobile }, info) => {
   await enter(page)
   await expect(page.getByRole('heading', { name: 'The Ashen Woods', exact: true })).toBeVisible()
   await expect(page.getByRole('img', { name: /original pixel-art woodland path/ })).toBeVisible()
   for (const name of ['Take the trail', 'Enter the gate', 'Search the ruins']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 })
+  }
+  if (isMobile) {
+    const description = await page.getByRole('main').getByText("The path ends. The adventure doesn't. Beyond these walls, the old kingdom is waiting.", { exact: true }).boundingBox()
+    const controls = await page.getByRole('group', { name: 'Choose your next move' }).boundingBox()
+    if (!description || !controls) throw new Error('The encounter description or controls are missing.')
+    expect(description.y + description.height).toBeLessThanOrEqual(controls.y)
   }
   const dimensions = await page.evaluate(() => ({
     viewport: innerWidth, content: document.documentElement.scrollWidth,
@@ -309,6 +315,11 @@ test('keeps every tactical choice and spell visible on a short phone', async ({ 
   await beginBattle(page, activate)
   await activate(page.getByRole('button', { name: 'Cast frost bind', exact: true }))
   await expect(page.getByText('Held by frost', { exact: true })).toBeVisible()
+  await expect.poll(async () => {
+    const intent = await page.getByRole('group', { name: 'Enemy intention' }).boundingBox()
+    const choices = await page.getByRole('group', { name: 'Choose your next move' }).boundingBox()
+    return Boolean(intent && choices && intent.y >= 0 && intent.y + intent.height <= choices.y)
+  }).toBe(true)
   await page.evaluate(() => window.scrollTo(0, 0))
   for (const name of ['Strike', 'Guard', 'Dodge', 'Cast ember bolt', 'Cast frost bind', 'Cast storm lance', 'Cast arcane ward', 'Cast mending light', 'Drink aether vial']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 })

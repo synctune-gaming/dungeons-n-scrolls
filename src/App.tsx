@@ -139,12 +139,14 @@ export default function App() {
   const primaryScreen = screen.type === 'adventurer' || screen.type === 'chat' ? screen.origin : screen.type
   const interactionOpen = panel !== null || game.puzzle !== null || game.dialogue || game.omen !== null || story !== null
   const blocked = interactionOpen || screen.type !== 'timeline' || game.visit !== null || game.status !== 'active' || animating
+  const inventoryBlocked = game.status !== 'active' || Boolean(game.puzzle || game.dialogue || game.omen || game.visit)
 
   useEffect(() => {
     window.scrollTo(0, 0)
-    const frame = requestAnimationFrame(() => document.getElementById('screen-heading')?.focus({ preventScroll: true }))
+    const target = screen.type === 'timeline' && game.combat?.result === 'fighting' ? 'room-title' : 'screen-heading'
+    const frame = requestAnimationFrame(() => document.getElementById(target)?.focus({ preventScroll: true }))
     return () => cancelAnimationFrame(frame)
-  }, [screen, game.visit?.destinationId, game.visit?.venueId])
+  }, [screen, game.visit?.destinationId, game.visit?.venueId, game.combat?.result])
 
   useEffect(() => {
     if (reducedMotion || game.feedback.id === 0 || game.feedback.type === 'info') { setAnimating(false); return }
@@ -193,6 +195,9 @@ export default function App() {
   }, [save.settings.sound, room.kind, game, player])
 
   const act = useCallback((action: GameAction) => {
+    const title = document.getElementById('room-title')
+    const bounds = title?.getBoundingClientRect()
+    if (title && bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) title.scrollIntoView({ block: 'center' })
     setScreen((current) => current.type === 'timeline' ? current : { type: 'timeline' })
     setSave((current) => {
       const next = gameReducer(current.game, action)
@@ -230,6 +235,8 @@ export default function App() {
         if (target.closest('input, textarea, select, dialog')) return
         if (target !== document.body && !target.closest('#live-encounter')) return
       }
+      const bounds = document.getElementById('room-title')?.getBoundingClientRect()
+      if (!bounds || bounds.top < 0 || bounds.bottom > window.innerHeight) return
       const direction = event.key === 'ArrowUp' ? 'up' : event.key === 'ArrowLeft' ? 'left' : event.key === 'ArrowRight' ? 'right' : null
       if (direction) {
         event.preventDefault()
@@ -403,8 +410,9 @@ export default function App() {
       </Modal>}
 
       {panel === 'inventory' && <Modal restoreFocusTo={dialogTrigger.current} title="Your satchel" eyebrow="A few things between you and the dark" onClose={() => setPanel(null)}>
-        <div className="inventory-item"><span className="item-icon"><FlaskConical size={24} /></span><div><h3>Healing tonic <span className="item-count">x{player.potions}</span></h3><p>Restores up to 24 health. A little courage in a bottle.</p></div><button className="outline-button" aria-label="Drink healing tonic" disabled={game.status !== 'active' || game.puzzle !== null || player.potions === 0 || player.health === player.maxHealth} onClick={() => act({ type: 'DRINK_POTION' })}>Drink</button></div>
-        <div className="inventory-item"><span className="item-icon aether-icon"><WandSparkles size={24} /></span><div><h3>Aether vial <span className="item-count">x{player.aether}</span></h3><p>Restores up to 14 mana. A stolen breath of starlight.</p></div><button className="outline-button" aria-label="Drink aether vial" disabled={game.status !== 'active' || game.puzzle !== null || player.aether === 0 || player.mana === player.maxMana} onClick={() => act({ type: 'DRINK_AETHER' })}>Drink</button></div>
+        <div className="inventory-item"><span className="item-icon"><FlaskConical size={24} /></span><div><h3>Healing tonic <span className="item-count">x{player.potions}</span></h3><p>Restores up to 24 health. A little courage in a bottle.</p></div><button className="outline-button" aria-label="Drink healing tonic" disabled={inventoryBlocked || player.potions === 0 || player.health === player.maxHealth} onClick={() => act({ type: 'DRINK_POTION' })}>Drink</button></div>
+        <div className="inventory-item"><span className="item-icon aether-icon"><WandSparkles size={24} /></span><div><h3>Aether vial <span className="item-count">x{player.aether}</span></h3><p>Restores up to 14 mana. A stolen breath of starlight.</p></div><button className="outline-button" aria-label="Drink aether vial" disabled={inventoryBlocked || player.aether === 0 || player.mana === player.maxMana} onClick={() => act({ type: 'DRINK_AETHER' })}>Drink</button></div>
+        {game.visit && <p className="modal-footnote" role="status">Finish your side trip before drinking supplies.</p>}
         <h3 className="inventory-heading">Equipped relics<span>{player.relics.length} / 3</span></h3>
         <RelicList relics={player.relics} />
         <p className="modal-footnote">Drinking in battle spends your turn. Relics apply automatically and last for this run. A new adventure starts with a fresh satchel.</p>
