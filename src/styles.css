@@ -769,8 +769,9 @@
     .room-copy h2 { font-size: 31px; }
     .room-copy > p { font-size: 12px; line-height: 1.75; min-height: auto; }
     .room-copy-footer { margin-top: 13px; }
-    .action-rail { right: 9px; top: auto; bottom: 161px; transform: none; gap: 5px; width: 44px; }
-    .rail-button { min-height: 48px; width: 44px; padding: 7px 0; gap: 4px; color: #e4ddcc; text-shadow: 0 1px 4px #000; }
+    .action-rail { right: 9px; top: 8px; bottom: auto; transform: none; gap: 5px; width: 44px; }
+    .rail-button { min-height: 44px; width: 44px; padding: 7px 0; gap: 4px; color: #e4ddcc; text-shadow: 0 1px 4px #000; }
+    .map-rail, .sound-rail { display: none; }
     .rail-button > svg { width: 19px; height: 19px; filter: drop-shadow(0 1px 3px #000); }
     .rail-button > span { font-size: 7px; }
     .rail-button:disabled { opacity: 0.55; }
@@ -857,7 +858,7 @@
     .combat-status { margin-top: 7px; }
     .enemy-intent { padding-top: 7px; margin-top: 7px; }
     .combat-active .choice-button { min-height: 72px; }
-    .combat-active .action-rail { top: 5px; bottom: auto; gap: 0; }
+    .combat-active .action-rail { top: 0; bottom: auto; gap: 0; }
     .spell-bar-heading { margin-bottom: 6px; }
     .spell-button { min-height: 56px; height: 56px; gap: 2px; padding-top: 6px; padding-bottom: 6px; }
     .spell-button > svg { width: 17px; height: 17px; }

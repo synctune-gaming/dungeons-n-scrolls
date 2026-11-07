@@ -13,8 +13,11 @@ test('shows an original scene with every choice reachable in the first viewport'
   if (isMobile) {
     const description = await page.getByRole('main').getByText("The path ends. The adventure doesn't. Beyond these walls, the old kingdom is waiting.", { exact: true }).boundingBox()
     const controls = await page.getByRole('group', { name: 'Choose your next move' }).boundingBox()
-    if (!description || !controls) throw new Error('The encounter description or controls are missing.')
+    const status = await page.getByRole('region', { name: 'Adventurer status' }).boundingBox()
+    const tonic = await page.getByRole('button', { name: 'Drink a healing tonic', exact: true }).boundingBox()
+    if (!description || !controls || !status || !tonic) throw new Error('The encounter description, status, or controls are missing.')
     expect(description.y + description.height).toBeLessThanOrEqual(controls.y)
+    expect(tonic.y).toBeGreaterThanOrEqual(status.y + status.height)
   }
   const dimensions = await page.evaluate(() => ({
     viewport: innerWidth, content: document.documentElement.scrollWidth,
@@ -181,7 +184,7 @@ test('plays all three floors to victory and preserves the win after restarting',
   await expect(page.getByRole('heading', { name: 'You lived to tell the tale.' })).toBeVisible()
   await activate(page.getByRole('button', { name: 'Try a new adventure', exact: true }))
   await activate(page.getByRole('button', { name: 'Begin a new adventure', exact: true }))
-  await activate(page.getByRole('button', { name: 'View your journey', exact: true }))
+  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
   await expect(page.getByRole('dialog').getByText('Completed adventures1', { exact: true })).toBeVisible()
   await expect(page.getByRole('dialog').getByText('Best floor3 / 3', { exact: true })).toBeVisible()
 })
@@ -220,7 +223,7 @@ test('keeps future rooms and guardians anonymous until they are discovered', asy
   await enter(page)
   await expect(page.locator('body')).not.toContainText('The Hollow King')
   await expect(page.locator('body')).not.toContainText('Crypt skulk')
-  await activate(page.getByRole('button', { name: 'View your journey', exact: true }))
+  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
   const map = page.getByRole('dialog', { name: 'A road into the unknown' })
   await expect(map).not.toContainText('The Hollow King')
   await expect(map).not.toContainText('The Cinderworks')

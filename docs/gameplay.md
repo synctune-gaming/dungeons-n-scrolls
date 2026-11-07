@@ -123,4 +123,6 @@ At zero health, the run ends. Defeating the Pale Warden and taking the last pass
 
 Profile, inventory, grimoire, map, journal, sound, and gesture hints are available from the navigation or mobile controls. Dialogs support Escape and return focus to their opener. Animated torches, creature movement, sword strikes, and spell effects follow your device's reduced-motion preference. Motion pauses behind dialogs and in hidden tabs.
 
+On phones, the scene-side tools are tonics, satchel, and grimoire. Open Map from the encounter header, and use Settings for sound and gesture hints; these avoid duplicating controls over the scene or hero stats.
+
 Progress, unfinished combat and visits, social history, and preferences stay in local browser storage. Version-1 and version-2 adventures migrate without losing their current floor route, health, inventory, encounter, or records; the old save keys remain as backups. Older saved floors keep their original layout; newly generated floors use twelve rooms. There is no account, tracking, server, or cloud synchronization. Clearing browser storage removes the save. If storage is blocked or damaged, the game explains the problem instead of claiming to save.
