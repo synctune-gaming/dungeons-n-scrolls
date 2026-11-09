@@ -212,10 +212,11 @@ test('keeps return gifts capped across conversations and expires them on a new r
 
 test('reads past encounters with native scrolling and keys without playing a hidden room', async ({ page, activate }) => {
   await enter(page, 'ashen-gate', { dexterity: 100 })
-  for (const key of ['ArrowUp', 'ArrowLeft', 'ArrowUp']) {
+  for (const [index, key] of ['ArrowUp', 'ArrowLeft', 'ArrowUp'].entries()) {
     await expect(page.getByRole('group', { name: 'Choose your next move' }).getByRole('button').first()).toBeEnabled()
     await page.getByRole('main').getByRole('heading', { level: 2 }).first().focus()
     await page.keyboard.press(key)
+    await expect.poll(async () => (await readSave(page)).game.roomIndex).toBe(index + 1)
   }
   await expect(page.getByRole('group', { name: 'Choose your next move' }).getByRole('button').first()).toBeEnabled()
   const before = await readSave(page)

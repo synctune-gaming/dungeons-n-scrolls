@@ -65,7 +65,7 @@ Failure traces and screenshots go to ignored `test-results/`. To capture initial
 
 Route order, combat variation, puzzle combinations, and rewards all advance the run's stored PRNG state. Do not call `Math.random()` inside the engine. New runs receive a browser-generated seed.
 
-Add gameplay through `gameReducer` so buttons, scene markers, gestures, and keyboard controls produce the same state transition. Keep saved states consistent with `savedGameSchema`; unknown versions and impossible states are rejected with a visible notice. Victory rewards are applied once and the encounter remains until Continue. Do not bypass boss phase gates.
+Add gameplay through `gameReducer` so buttons, scene markers, gestures, and keyboard controls produce the same state transition. Synchronize the animation input lock and keyboard listeners before paint so shortcuts are ready whenever controls are visibly enabled. Keep saved states consistent with `savedGameSchema`; unknown versions and impossible states are rejected with a visible notice. Victory rewards are applied once and the encounter remains until Continue. Do not bypass boss phase gates.
 
 Keep `game.player` authoritative for the hero. Personalization is cosmetic; profiles must not copy gameplay stats into social state. Navigation state is transient and does not dispatch game choices. Incoming gift claims update the gameplay ledger and conversation receipt atomically through `socialReducer`; issuing/claiming returns cannot exceed three per run. Claims must respect encounter and resource guards. Chat actions validate a strict ID-only union: arbitrary message text and notes are rejected.
 

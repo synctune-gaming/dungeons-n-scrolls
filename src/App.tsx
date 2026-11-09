@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { SetStateAction } from 'react'
 import {
   ArrowLeft, ArrowRight, ArrowUp, Backpack, BookOpen, Check,
@@ -138,7 +138,8 @@ export default function App() {
     return () => cancelAnimationFrame(frame)
   }, [screen, game.visit?.destinationId, game.visit?.venueId, game.combat?.result])
 
-  useEffect(() => {
+  // Keep the animation lock in sync with visible controls before paint.
+  useLayoutEffect(() => {
     if (reducedMotion || game.feedback.id === 0 || game.feedback.type === 'info') { setAnimating(false); return }
     setAnimating(true)
     const timer = window.setTimeout(() => setAnimating(false), 450)
@@ -216,7 +217,7 @@ export default function App() {
     act({ type: 'CHOOSE', direction })
   }, [act, blocked])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (blocked) return
     const handleKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
