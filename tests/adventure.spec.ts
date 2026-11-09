@@ -157,6 +157,7 @@ test('persists the current room and preferences through a reload', async ({ page
   await page.reload()
   await expect(page.getByRole('heading', { name: 'A shape in the dark', exact: true })).toBeVisible()
   expect((await readSave(page)).settings.hints).toBe(false)
+  await expect(page.getByRole('group', { name: 'Choose your next move' }).locator('button > svg')).toHaveCount(0)
   await openTools(page, activate)
   await activate(page.getByRole('button', { name: 'Open settings', exact: true }))
   await expect(page.getByRole('checkbox', { name: /Gesture hints/ })).not.toBeChecked()

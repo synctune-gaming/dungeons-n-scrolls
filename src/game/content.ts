@@ -254,16 +254,6 @@ export const ROOMS: Record<RoomId, Room> = {
   },
 }
 
-export const ROOM_LABELS: Record<Room['kind'], string> = {
-  passage: 'Uncharted path',
-  combat: 'Enemy encounter',
-  npc: 'A chance meeting',
-  treasure: 'Hidden treasure',
-  shop: 'Wandering shop',
-  shrine: 'Safe haven',
-  boss: 'Boss encounter',
-}
-
 export const SPELLS: Record<SpellId, {
   name: string
   shortName: string

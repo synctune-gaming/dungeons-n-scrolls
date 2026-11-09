@@ -6,6 +6,15 @@ const HEIGHT = 300
 type Point = [number, number]
 type Context = CanvasRenderingContext2D
 
+function sceneCamera(height: number) {
+  const scale = Math.max(1, height / HEIGHT)
+  const x = (WIDTH - WIDTH * scale) / 2
+  return {
+    scale, x, y: (height - HEIGHT * scale) / 2,
+    torchXs: [Math.max(43, (43 - x) / scale), Math.min(275, (275 - x) / scale)],
+  }
+}
+
 const PALETTES = [
   { sky: '#343037', stone: '#56515c', shadow: '#27252e', moss: '#444c3b', light: '#d4a85b', cloth: '#696447' },
   { sky: '#41282b', stone: '#63504d', shadow: '#2e252c', moss: '#694737', light: '#e8a259', cloth: '#806044' },
@@ -63,7 +72,7 @@ function torch(context: Context, x: number, y: number, size = 1) {
   context.restore()
 }
 
-function dungeon(context: Context, palette: Palette, seed: number) {
+function dungeon(context: Context, palette: Palette, seed: number, torchXs: readonly number[]) {
   context.fillStyle = '#111319'
   context.fillRect(0, 0, WIDTH, HEIGHT)
   polygon(context, [[0, 0], [320, 0], [210, 108], [110, 108]], palette.shadow)
@@ -119,8 +128,7 @@ function dungeon(context: Context, palette: Palette, seed: number) {
     context.fillStyle = '#262631'
     context.fillRect(x - 5, y, 11, 2)
   }
-  torch(context, 43, 131, 1.1)
-  torch(context, 275, 131, 1.1)
+  for (const x of torchXs) torch(context, x, 131, 1.1)
   glow(context, 160, 225, 80, '#b8996630')
 }
 
@@ -363,11 +371,13 @@ function dither(context: Context, seed: number, height: number) {
 function backdrop(context: Context, room: Room, floor: number, seed: number, height: number) {
   const palette = PALETTES[floor - 1]
   if (!palette) throw new Error(`No artwork palette exists for floor ${floor}.`)
+  const camera = sceneCamera(height)
   context.imageSmoothingEnabled = false
   context.save()
-  context.scale(1, height / HEIGHT)
+  context.translate(camera.x, camera.y)
+  context.scale(camera.scale, camera.scale)
   if (room.zone === 'overworld') overworld(context, palette, seed, floor)
-  else dungeon(context, palette, seed)
+  else dungeon(context, palette, seed, camera.torchXs)
   context.restore()
   dither(context, seed, height)
 }
@@ -483,12 +493,13 @@ function renderFrame(
     ? Math.sin(progress * 22) * (1 - progress) * 2 : 0
   context.translate(shake, 0)
   context.drawImage(background, 0, 0)
+  const camera = sceneCamera(height)
   context.save()
-  context.scale(1, height / HEIGHT)
+  context.translate(camera.x, camera.y)
+  context.scale(camera.scale, camera.scale)
   const flicker = reduced ? 0 : Math.sin(time * 2.3) * 0.035
   if (room.zone === 'dungeon') {
-    torch(context, 43, 131, 1.1 + flicker)
-    torch(context, 275, 131, 1.1 - flicker)
+    for (const [index, x] of camera.torchXs.entries()) torch(context, x, 131, 1.1 + (index === 0 ? flicker : -flicker))
   } else {
     torch(context, 120, 152, 0.65 + flicker)
     torch(context, 201, 152, 0.65 - flicker)
@@ -638,7 +649,7 @@ export function PixelScene({ room, floor, seed, known = true, combat = null, fee
     const resize = () => {
       const bounds = element.getBoundingClientRect()
       pixelScale = WIDTH / Math.max(1, bounds.width)
-      const nextHeight = Math.max(100, Math.round(pixelScale * bounds.height))
+      const nextHeight = Math.max(1, Math.round(pixelScale * bounds.height))
       if (height !== nextHeight) {
         height = nextHeight
         element.height = height

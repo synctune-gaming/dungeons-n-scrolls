@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, ArrowUp, Backpack, Crown, DoorOpen, Eye, Flame, FlaskConical, Heart, Map, UserRound, WandSparkles } from 'lucide-react'
-import { getRegion, ROOMS, ROOM_LABELS } from '../game/content'
+import { getRegion, ROOMS } from '../game/content'
 import { getChoices, getRoom, getRoomPresentation } from '../game/engine'
 import { INSCRIPTION_ROOM_IDS } from '../game/types'
 import type { Direction, GameAction, GameState, SavedGame } from '../game/types'
@@ -8,7 +8,11 @@ import { useRoomGestures } from '../useRoomGestures'
 import { CombatStatus, SpellBar } from './CombatControls'
 import { PixelScene } from './PixelScene'
 
-const DIRECTIONS = { left: ArrowLeft, up: ArrowUp, right: ArrowRight }
+const DIRECTIONS = {
+  left: { icon: ArrowLeft, shortcut: 'ArrowLeft' },
+  up: { icon: ArrowUp, shortcut: 'ArrowUp' },
+  right: { icon: ArrowRight, shortcut: 'ArrowRight' },
+}
 const OUTCOMES = { explored: 'Explored', passed: 'Moved onward', victory: 'Victory', retreated: 'Retreated' }
 
 export function EncounterHistory({ game }: { game: GameState }) {
@@ -109,22 +113,29 @@ export function Timeline({ save, blocked, interactionOpen, lastDirection, reduce
           </div>
         </header>
         <section ref={status} className="player-stats" aria-label="Adventurer status">
-          <div className="health-stat"><div className="stat-top"><span><Heart size={13} />Health</span><strong>{player.health}<span> / {player.maxHealth}</span></strong></div><progress aria-label="Health" max={player.maxHealth} value={player.health} className={player.health <= player.maxHealth * 0.25 ? 'critical' : ''} /></div>
-          <div className="mana-stat"><div className="stat-top"><span><WandSparkles size={13} />Mana</span><strong>{player.mana}<span> / {player.maxMana}</span></strong></div><progress aria-label="Mana" max={player.maxMana} value={player.mana} /></div>
+          <div className="health-stat"><div className="stat-top"><span><Heart size={13} /><span className="sr-only">Health</span></span><strong>{player.health}<span> / {player.maxHealth}</span></strong></div><progress aria-label="Health" max={player.maxHealth} value={player.health} className={player.health <= player.maxHealth * 0.25 ? 'critical' : ''} /></div>
+          <div className="mana-stat"><div className="stat-top"><span><WandSparkles size={13} /><span className="sr-only">Mana</span></span><strong>{player.mana}<span> / {player.maxMana}</span></strong></div><progress aria-label="Mana" max={player.maxMana} value={player.mana} /></div>
         </section>
         <div ref={dock} className="encounter-dock">
           {game.status === 'active' && <div className="room-copy">
-            <span className="eyebrow">{presentation.known ? ROOM_LABELS[room.kind] : 'Unseen presence'}</span>
             <div className="room-title-row"><h2 id="room-title" tabIndex={-1}>{presentation.name}</h2>{presentation.known && (room.kind === 'combat' || room.kind === 'boss') && <span className={`enemy-weakness weakness-${room.enemy.weakness}`}>Weak to {room.enemy.weakness}</span>}</div>
             {game.combat ? <CombatStatus game={game} /> : <p>{presentation.description}</p>}
           </div>}
           {game.status === 'active' ? <div className="encounter-actions">
-          <div className={`choice-buttons ${choices.length === 1 ? 'single-choice' : ''}`} role="group" aria-label="Choose your next move">{choices.map((choice) => {
-            const Icon = DIRECTIONS[choice.direction]
-            return <div key={choice.direction} className={`choice-option ${choice.direction === 'up' ? 'primary-option' : ''}`}><button className={`choice-button ${choice.direction === 'up' ? 'primary-choice' : ''}`} aria-describedby={`choice-key-${choice.direction} choice-hint-${choice.direction}`} disabled={choice.disabled || blocked} onClick={(event) => onChoose(choice.direction, event.currentTarget)}><strong>{choice.label}</strong></button><span id={`choice-key-${choice.direction}`} className={save.settings.hints ? 'choice-key' : 'sr-only'}><Icon size={13} /><span>{choice.direction === 'up' ? 'Swipe up' : `Swipe ${choice.direction}`}</span></span><small id={`choice-hint-${choice.direction}`} className="choice-hint">{choice.hint}</small></div>
-          })}</div>
-          {fighting && <SpellBar game={game} disabled={blocked} onAction={onAction} />}
-        </div> : <section className={`run-summary ${game.status === 'won' ? 'victory' : ''}`} aria-label="Run summary">{game.status === 'won' ? <Crown size={27} /> : <Flame size={27} />}<div><h2>{game.status === 'won' ? 'You lived to tell the tale.' : 'Every ending is a beginning.'}</h2><p>{game.roomsCleared} rooms explored. {player.gold} gold found. {game.status === 'dead' ? 'A new path is waiting.' : 'The three guardians have fallen.'}</p></div><button className="gold-button" onClick={onRestart}>Try a new adventure<ArrowRight size={16} /></button></section>}
+            <div className={`choice-buttons ${choices.length === 1 ? 'single-choice' : ''}`} role="group" aria-label="Choose your next move">{choices.map((choice) => {
+              const { icon: Icon, shortcut } = DIRECTIONS[choice.direction]
+              return (
+                <div key={choice.direction} className={`choice-option ${choice.direction === 'up' ? 'primary-option' : ''}`}>
+                  <button className={`choice-button ${choice.direction === 'up' ? 'primary-choice' : ''}`} aria-describedby={`choice-hint-${choice.direction}`} aria-keyshortcuts={shortcut} disabled={choice.disabled || blocked} onClick={(event) => onChoose(choice.direction, event.currentTarget)}>
+                    {save.settings.hints && <Icon size={16} aria-hidden="true" />}
+                    <strong>{choice.label}</strong>
+                  </button>
+                  <small id={`choice-hint-${choice.direction}`} className="choice-hint">{choice.hint}</small>
+                </div>
+              )
+            })}</div>
+            {fighting && <SpellBar game={game} disabled={blocked} onAction={onAction} />}
+          </div> : <section className={`run-summary ${game.status === 'won' ? 'victory' : ''}`} aria-label="Run summary">{game.status === 'won' ? <Crown size={27} /> : <Flame size={27} />}<div><h2>{game.status === 'won' ? 'You lived to tell the tale.' : 'Every ending is a beginning.'}</h2><p>{game.roomsCleared} rooms explored. {player.gold} gold found. {game.status === 'dead' ? 'A new path is waiting.' : 'The three guardians have fallen.'}</p></div><button className="gold-button" onClick={onRestart}>Try a new adventure<ArrowRight size={16} /></button></section>}
           {room.kind === 'shop' && game.status === 'active' && <button className="outline-button merchant-extra" disabled={blocked || player.gold < 12 || player.aether >= 1000} onClick={() => onAction({ type: 'BUY_AETHER' })}><WandSparkles size={15} />Buy an aether vial / 12 gold</button>}
           {game.feedback.id > 0 && <p className={`action-feedback feedback-${game.feedback.type}`} key={`feedback-${game.feedback.id}`} role="status">{game.feedback.text || (victorious ? 'The way is clear. Continue when you are ready.' : 'Your next move is yours.')}</p>}
         </div>

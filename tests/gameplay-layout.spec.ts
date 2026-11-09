@@ -1,6 +1,44 @@
 import { expect } from '@playwright/test'
 import { beginBattle, enter, readSave, test } from './fixtures'
 
+test('shows arrows and action outcomes without swipe labels', async ({ page }) => {
+  await enter(page)
+  const choices = page.getByRole('group', { name: 'Choose your next move' })
+  for (const [label, outcome, shortcut] of [
+    ['Take the trail', 'Scout ahead', 'ArrowLeft'],
+    ['Enter the gate', 'Explore', 'ArrowUp'],
+    ['Search the ruins', 'Find gold', 'ArrowRight'],
+  ] as const) {
+    const action = choices.getByRole('button', { name: label, exact: true })
+    await expect(action).toHaveAccessibleDescription(outcome)
+    await expect(action).toHaveAttribute('aria-keyshortcuts', shortcut)
+    await expect(action.locator('svg')).toHaveCount(1)
+  }
+  await expect(choices.getByText(/^Swipe (left|right|up|down)$/i)).toHaveCount(0)
+})
+
+test('keeps artwork proportions in portrait and landscape', async ({ page, activate }) => {
+  await page.addInitScript(() => {
+    const scale = CanvasRenderingContext2D.prototype.scale
+    CanvasRenderingContext2D.prototype.scale = function (x, y) {
+      if (Math.abs(Math.abs(x) - Math.abs(y)) > 0.000001) throw new Error('Scene artwork must not be stretched on one axis.')
+      scale.call(this, x, y)
+    }
+  })
+  await enter(page)
+  const art = page.getByRole('main').getByRole('img')
+  await expect(art).toBeVisible()
+  for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1280, height: 320 }]) {
+    await page.setViewportSize(viewport)
+    await expect.poll(() => art.evaluate((element: HTMLCanvasElement) => {
+      const bounds = element.getBoundingClientRect()
+      return Math.abs(element.width / bounds.width - element.height / bounds.height)
+    })).toBeLessThanOrEqual(1 / viewport.height)
+  }
+  await activate(page.getByRole('button', { name: 'Enter the gate', exact: true }))
+  await expect(art).toHaveAccessibleName(/torchlit dungeon/)
+})
+
 test('fills the viewport with the live scene instead of page chrome', async ({ page }) => {
   await enter(page)
   const viewport = page.viewportSize()

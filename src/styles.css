@@ -165,7 +165,6 @@
   .encounter-dock { position: absolute; bottom: calc(var(--navigation-height) + env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); max-width: 600px; margin: 0 auto; padding-bottom: 12px; display: flex; flex-direction: column; gap: 10px; z-index: 4; }
   .encounter-dock::before { content: ''; position: absolute; inset: -80px -20px 0; background: linear-gradient(transparent, #151619e8 30%, var(--ink)); z-index: -1; pointer-events: none; }
   .room-copy { padding: 0; }
-  .room-copy > .eyebrow { font-size: 8px; letter-spacing: 1px; }
   .room-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .room-copy h2 { font-size: clamp(27px, 6vw, 34px); line-height: 1.12; letter-spacing: -0.3px; outline: none; }
   .room-copy > p { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 7px; }
@@ -183,13 +182,12 @@
   .rail-button { display: flex; align-items: center; justify-content: center; min-height: 44px; width: 44px; padding: 0; color: var(--paper); background: #151619a8; border-radius: 5px; }
   .potion-button { color: var(--health); }
   .choice-buttons { display: grid; grid-template-columns: 1fr 1.17fr 1fr; gap: 6px; }
-  .choice-button { display: flex; align-items: center; justify-content: center; min-height: 64px; padding: 18px 4px; border: 1px solid #6e604b; border-radius: 5px; background: #252329d9; }
-  .choice-key { display: flex; align-items: center; gap: 4px; color: #aaa292; font: 8px var(--utility); text-transform: uppercase; letter-spacing: 0.5px; }
+  .choice-button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 56px; padding: 8px 4px 22px; border: 1px solid #6e604b; border-radius: 5px; background: #252329d9; }
+  .choice-button > svg { color: var(--gold); }
   .choice-button strong { font-size: 12px; line-height: 1.2; font-weight: 500; text-align: center; }
   .choice-buttons.single-choice { grid-template-columns: 1fr; }
-  .single-choice .choice-button { min-height: 56px; }
   .primary-choice { border-color: #b49b69; background: #c4aa76; color: #28231a; box-shadow: inset 0 1px 0 #e4c99166; }
-  .primary-choice .choice-key { color: #473b28; }
+  .primary-choice > svg { color: #473b28; }
   .primary-choice strong { font-weight: 600; }
   .save-status { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 21px; color: var(--muted); font-size: 9px; }
   .saved-dot, .unsaved-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--sage); }
@@ -413,9 +411,8 @@
     .gameplay-shell .mobile-navigation { display: grid; background: #151619f5; border-top-color: #c3aa7726; }
     .choice-option { position: relative; }
     .choice-option > .choice-button { width: 100%; }
-    .choice-option > .choice-key { position: absolute; top: 7px; left: 0; right: 0; justify-content: center; pointer-events: none; letter-spacing: 0; }
     .choice-hint { position: absolute; bottom: 7px; left: 4px; right: 4px; pointer-events: none; color: #aaa292; font-size: 8px; line-height: 1.2; text-align: center; }
-    .primary-option > .choice-key, .primary-option > .choice-hint { color: #473b28; }
+    .primary-option > .choice-hint { color: #473b28; }
     .potion-rail { position: relative; }
     .rail-count { position: absolute; right: 0; top: 0; color: var(--paper); background: var(--panel); border: 1px solid var(--line); border-radius: 3px; min-width: 14px; padding: 2px; text-align: center; font: 8px var(--utility); pointer-events: none; }
     .tool-stats { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; color: var(--gold); font: 10px var(--utility); }

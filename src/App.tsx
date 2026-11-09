@@ -439,7 +439,7 @@ export default function App() {
 
       {panel === 'settings' && <Modal restoreFocusTo={dialogTrigger.current} title="Make yourself at home" eyebrow="Settings" onClose={() => setPanel(null)}>
         <label className="setting-row"><span><strong>Sound effects</strong><small>Quiet, retro tones for your choices.</small></span><input type="checkbox" checked={save.settings.sound} onChange={toggleSound} /></label>
-        <label className="setting-row"><span><strong>Gesture hints</strong><small>Show the scrolling and keyboard guide.</small></span><input type="checkbox" checked={save.settings.hints} onChange={(event) => { const hints = event.currentTarget.checked; setSave((current) => ({ ...current, settings: { ...current.settings, hints } })) }} /></label>
+        <label className="setting-row"><span><strong>Gesture hints</strong><small>Show direction arrows on encounter choices.</small></span><input type="checkbox" checked={save.settings.hints} onChange={(event) => { const hints = event.currentTarget.checked; setSave((current) => ({ ...current, settings: { ...current.settings, hints } })) }} /></label>
         <p className="modal-footnote">Atmosphere, creature movement, and spell effects follow your device's reduced-motion setting. Background animation pauses in hidden tabs and behind dialogs. Progress stays in this browser.</p>
         <button className="outline-button full-width" onClick={() => { setNextClass(player.classId); setPanel('restart') }}><Plus size={16} />Start a new adventure</button>
       </Modal>}
