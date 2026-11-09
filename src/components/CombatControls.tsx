@@ -48,9 +48,8 @@ export function SpellBar({ game, disabled, onAction }: {
 }) {
   return (
     <section className="spell-bar" aria-label="Combat spells">
-      <div className="spell-bar-heading"><h3>Your grimoire</h3><span>1-5 cast / A refills</span></div>
       <div className="spell-buttons">
-        {SPELL_IDS.map((id, index) => {
+        {SPELL_IDS.map((id) => {
           const spell = SPELLS[id]
           const Icon = SPELL_ICONS[id]
           const reason = spellUnavailable(game, id)
@@ -61,7 +60,7 @@ export function SpellBar({ game, disabled, onAction }: {
             aria-label={`Cast ${spell.name.toLowerCase()}`}
             title={reason ?? spell.description}
             onClick={() => onAction({ type: 'CAST_SPELL', spell: id })}
-          ><span className="spell-shortcut">{index + 1}</span><Icon size={19} /><strong>{spell.shortName}</strong><small>{spell.cost} mana</small></button>
+          ><Icon size={19} /><strong>{spell.shortName}</strong><small>{spell.cost} mana</small></button>
         })}
         <button
           className="spell-button spell-aether"
@@ -69,7 +68,7 @@ export function SpellBar({ game, disabled, onAction }: {
           aria-label="Drink aether vial"
           title="Restore up to 14 mana. Drinking spends your turn."
           onClick={() => onAction({ type: 'DRINK_AETHER' })}
-        ><span className="spell-shortcut">A</span><WandSparkles size={19} /><strong>Refill</strong><small>x{game.player.aether} vial</small></button>
+        ><WandSparkles size={19} /><strong>Refill</strong><small>x{game.player.aether} vial</small></button>
       </div>
     </section>
   )

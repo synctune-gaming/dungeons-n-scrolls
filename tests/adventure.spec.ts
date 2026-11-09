@@ -1,11 +1,11 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect } from '@playwright/test'
 import { SAVE_KEY } from '../src/game/persistence'
-import { beginBattle, enter, test } from './fixtures'
+import { beginBattle, enter, openTools, readSave, test } from './fixtures'
 
 test('shows an original scene with every choice reachable in the first viewport', async ({ page, isMobile }, info) => {
   await enter(page)
-  await expect(page.getByRole('heading', { name: 'The Ashen Woods', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'The forgotten gate', exact: true })).toBeVisible()
   await expect(page.getByRole('img', { name: /original pixel-art woodland path/ })).toBeVisible()
   for (const name of ['Take the trail', 'Enter the gate', 'Search the ruins']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 })
@@ -17,7 +17,7 @@ test('shows an original scene with every choice reachable in the first viewport'
     const tonic = await page.getByRole('button', { name: 'Drink a healing tonic', exact: true }).boundingBox()
     if (!description || !controls || !status || !tonic) throw new Error('The encounter description, status, or controls are missing.')
     expect(description.y + description.height).toBeLessThanOrEqual(controls.y)
-    expect(tonic.y).toBeGreaterThanOrEqual(status.y + status.height)
+    expect(tonic.y + tonic.height).toBeLessThanOrEqual(status.y)
   }
   const dimensions = await page.evaluate(() => ({
     viewport: innerWidth, content: document.documentElement.scrollWidth,
@@ -150,12 +150,14 @@ test('persists the current room and preferences through a reload', async ({ page
   await enter(page)
   await activate(page.getByRole('button', { name: 'Enter the gate', exact: true }))
   await expect(page.getByRole('heading', { name: 'A shape in the dark', exact: true })).toBeVisible()
+  await openTools(page, activate)
   await activate(page.getByRole('button', { name: 'Open settings', exact: true }))
   await activate(page.getByRole('checkbox', { name: /Gesture hints/ }))
   await page.keyboard.press('Escape')
   await page.reload()
   await expect(page.getByRole('heading', { name: 'A shape in the dark', exact: true })).toBeVisible()
-  await expect(page.getByText('Scroll or swipe to explore', { exact: true })).toHaveCount(0)
+  expect((await readSave(page)).settings.hints).toBe(false)
+  await openTools(page, activate)
   await activate(page.getByRole('button', { name: 'Open settings', exact: true }))
   await expect(page.getByRole('checkbox', { name: /Gesture hints/ })).not.toBeChecked()
 })

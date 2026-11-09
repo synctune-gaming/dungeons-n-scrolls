@@ -36,7 +36,7 @@ npm run test:e2e
 
 On Linux, use `npx playwright install --with-deps chromium webkit` if browser system libraries are missing.
 
-Playwright manages an isolated local Vite server on port 4177 and stops it afterward. The suite covers desktop Chromium, Android-style Chromium, and mobile WebKit. It uses mouse input on desktop and native taps on touch projects. Chromium's mobile swipe checks inject real touch input through CDP. Checks cover hidden identities, real boss phases and spell combinations, combat resumption, scene interactions, short-phone controls, and actual pixel changes for animation and reduced motion. Social flows cover persistent navigation, personalization, follow ordering, story controls/focus, input isolation, playable visits and cooldowns, gift receipts/expiry, preset-only chat, 320px layouts, and axe accessibility checks.
+Playwright manages an isolated local Vite server on port 4177 and stops it afterward. The suite covers desktop Chromium, Android-style Chromium, and mobile WebKit. It uses mouse input on desktop and native taps on touch projects. Chromium's mobile swipe checks inject real touch input through CDP. Checks cover a viewport-filling scene without document scrolling, 44px gameplay touch targets at 320x568 and after landscape rotation, hidden identities, real boss phases and spell combinations, combat resumption, scene interactions, and actual pixel changes for animation and reduced motion. Social flows cover persistent navigation, personalization, follow ordering, More/tools/story focus restoration, input isolation, playable visits and cooldowns, gift receipts/expiry, preset-only chat, 320px layouts, and axe accessibility checks.
 
 Playwright does not expose native mouse-wheel or swipe injection for mobile WebKit, so those two API-specific checks are explicitly skipped there. Its keyboard, native tap, puzzle, shopping, saving, death, victory, and accessibility checks still run. Physical-device Safari swipe behavior needs manual verification.
 
@@ -53,15 +53,15 @@ Failure traces and screenshots go to ignored `test-results/`. To capture initial
 | `src/game/persistence.ts` | Browser storage with explicit failure reporting |
 | `src/components/PixelScene.tsx` | Original procedural pixel artwork, dithering, and responsive framing |
 | `src/components/CombatControls.tsx` | Enemy health, intentions, conditions, spells, and mana refills |
-| `src/components/Timeline.tsx` | One live encounter, stories strip, tactical dock, and read-only past encounters |
+| `src/components/Timeline.tsx` | One fullscreen live encounter, compact status/tactical overlays, and shared read-only encounter history |
 | `src/components/Profiles.tsx`, `Portrait.tsx`, `CharacterDetails.tsx` | Cosmetic identity, live hero/fictional profiles, and shared portrait/stat/equipment presentation |
 | `src/components/Stories.tsx`, `Explore.tsx`, `GiftChat.tsx` | Sequential stories, playable world discovery, and preset-only conversation controls |
 | `src/social/types.ts`, `content.ts`, `engine.ts` | Validated local social state, authored fictional content, and immutable social transitions |
 | `src/useRoomGestures.ts` | Pointer swipes and wheel-burst locking |
 | `src/useReducedMotion.ts` | Live reduced-motion preference |
-| `src/App.tsx` | One saved-state owner, typed screen navigation, audio, secondary tools, and input guards |
+| `src/App.tsx` | One saved-state owner, typed screen navigation, More/tools/stories/history, audio, and input guards |
 | `src/styles.css` | Basalt, antique-gold, and torchlight tokens; responsive layouts |
-| `tests/adventure.spec.ts`, `tests/social.spec.ts` | Gameplay/social browser and accessibility checks |
+| `tests/adventure.spec.ts`, `tests/social.spec.ts`, `tests/gameplay-layout.spec.ts` | Gameplay/social browser, fullscreen/mobile layout, and accessibility checks |
 
 Route order, combat variation, puzzle combinations, and rewards all advance the run's stored PRNG state. Do not call `Math.random()` inside the engine. New runs receive a browser-generated seed.
 
@@ -73,7 +73,7 @@ Visits store a separate destination/venue context, not a second dungeon run. Mai
 
 Keep unknown identities out of names, descriptions, image labels, icons, and map entries. `discovered` records identification, not merely passing a room. Do not reveal a future guardian just because it occupies the last route slot.
 
-Artwork is drawn locally at a low logical pixel resolution. Dithered backdrops are cached; the animation loop only redraws live entities, torches, particles, weapons, and effects, capped at 20 FPS. Backdrops adapt to the viewport while creatures and the first-person sword retain their proportions. Animation frames, observers, listeners, and feedback timers are cleaned up; hidden tabs and dialogs pause rendering. Reduced motion keeps static state and combat feedback without ambient movement.
+Artwork is drawn locally at a low logical pixel resolution. Dithered backdrops are cached; the animation loop only redraws live entities, torches, particles, weapons, and effects, capped at 20 FPS. Backdrops fill the viewport while creatures and the first-person sword retain their proportions. The live encounter observes its status and dock bounds to keep foreground entities, spell effects, and scene markers out of HUD areas; other scenes keep their default framing. Animation frames, observers, listeners, and feedback timers are cleaned up; hidden tabs and dialogs pause rendering. Reduced motion keeps static state and combat feedback without ambient movement.
 
 Feedback stores both the action effect and its outcome. A killing or phase-breaking spell must still show its own effect, alongside the victory or phase transition. Resuming a saved fight does not replay old spell animations. The supplied visual reference informed the atmosphere; its image and the Instagram video are not bundled.
 

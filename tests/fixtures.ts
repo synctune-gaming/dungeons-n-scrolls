@@ -56,6 +56,11 @@ export async function beginBattle(page: Page, activate: (target: Locator) => Pro
   await expect(page.getByRole('button', { name: 'Strike', exact: true })).toBeEnabled()
 }
 
+export async function openTools(page: Page, activate: (target: Locator) => Promise<void>) {
+  await activate(page.getByRole('button', { name: 'More', exact: true }))
+  await expect(page.getByRole('dialog', { name: 'Adventure tools', exact: true })).toBeVisible()
+}
+
 export async function readSave(page: Page): Promise<SavedGame> {
   const value: unknown = await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
