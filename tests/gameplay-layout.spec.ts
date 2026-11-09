@@ -16,6 +16,7 @@ test('fills the viewport with the live scene instead of page chrome', async ({ p
   await expect(page.getByRole('progressbar', { name: 'Health', exact: true })).toBeVisible()
   await expect(page.getByRole('progressbar', { name: 'Mana', exact: true })).toBeVisible()
   await expect(page.getByRole('progressbar', { name: 'Experience', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^View journey map/ })).toHaveAccessibleName(/Floor 01.*Room 1 \/ 8/)
 })
 
 test('keeps essential controls reachable on small phones and after rotation', async ({ page, activate }, info) => {
@@ -30,7 +31,7 @@ test('keeps essential controls reachable on small phones and after rotation', as
       'Cast arcane ward', 'Cast mending light', 'Drink aether vial', 'Open your satchel',
       'Open your grimoire', 'View journey map', 'Timeline', 'Search', 'Profile', 'More',
     ]) {
-      const control = page.getByRole('button', { name, exact: true })
+      const control = page.getByRole('button', { name: name === 'View journey map' ? /^View journey map/ : name, exact: name !== 'View journey map' })
       await expect(control).toBeInViewport({ ratio: 1 })
       const bounds = await control.boundingBox()
       if (!bounds) throw new Error(`${name} is missing from the encounter.`)

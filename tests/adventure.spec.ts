@@ -186,7 +186,7 @@ test('plays all three floors to victory and preserves the win after restarting',
   await expect(page.getByRole('heading', { name: 'You lived to tell the tale.' })).toBeVisible()
   await activate(page.getByRole('button', { name: 'Try a new adventure', exact: true }))
   await activate(page.getByRole('button', { name: 'Begin a new adventure', exact: true }))
-  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  await activate(page.getByRole('button', { name: /^View journey map/ }))
   await expect(page.getByRole('dialog').getByText('Completed adventures1', { exact: true })).toBeVisible()
   await expect(page.getByRole('dialog').getByText('Best floor3 / 3', { exact: true })).toBeVisible()
 })
@@ -200,10 +200,10 @@ test('reports corrupt storage and still provides a playable new adventure', asyn
 
 test('meets automated accessibility checks in the adventure and inventory', async ({ page, activate }) => {
   await enter(page)
-  const adventure = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
+  const adventure = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
   expect(adventure.violations).toEqual([])
   await activate(page.getByRole('button', { name: 'Open your satchel', exact: true }))
-  const inventory = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
+  const inventory = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
   expect(inventory.violations).toEqual([])
 })
 
@@ -225,7 +225,7 @@ test('keeps future rooms and guardians anonymous until they are discovered', asy
   await enter(page)
   await expect(page.locator('body')).not.toContainText('The Hollow King')
   await expect(page.locator('body')).not.toContainText('Crypt skulk')
-  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  await activate(page.getByRole('button', { name: /^View journey map/ }))
   const map = page.getByRole('dialog', { name: 'A road into the unknown' })
   await expect(map).not.toContainText('The Hollow King')
   await expect(map).not.toContainText('The Cinderworks')

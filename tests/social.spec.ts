@@ -250,7 +250,7 @@ test('starts a fresh twelve-room adventure with the guardian at the end', async 
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   expect((await readSave(page)).game.deck).toHaveLength(12)
-  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  await activate(page.getByRole('button', { name: /^View journey map/ }))
   const map = page.getByRole('dialog', { name: 'A road into the unknown' })
   await expect(map.getByRole('list', { name: 'Current floor route' }).getByRole('listitem')).toHaveCount(12)
   await page.keyboard.press('Escape')

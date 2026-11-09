@@ -101,7 +101,7 @@ export function Timeline({ save, blocked, interactionOpen, lastDirection, reduce
         </div>
         <header className="adventure-header">
           <h1 id="screen-heading" tabIndex={-1} className="sr-only">{region.name}</h1>
-          <button className="floor-badge" onClick={() => onPanel('map')} aria-label="View journey map"><Map size={17} /><span>Floor {String(game.floor).padStart(2, '0')}<small>Room {game.roomIndex + 1} / {game.deck.length}</small></span></button>
+          <button className="floor-badge" onClick={() => onPanel('map')}><span className="sr-only">View journey map. </span><Map size={17} /><span>Floor {String(game.floor).padStart(2, '0')}<small>Room {game.roomIndex + 1} / {game.deck.length}</small></span></button>
           <div className="action-rail" role="group" aria-label="Quick actions">
             <div className="potion-rail"><button className="rail-button potion-button" aria-label="Drink a healing tonic" aria-describedby="tonic-count" disabled={blocked || player.potions === 0 || player.health === player.maxHealth} onClick={() => onAction({ type: 'DRINK_POTION' })}><FlaskConical size={21} /></button><span id="tonic-count" className="rail-count"><span className="sr-only">Tonics remaining: </span>{player.potions}</span></div>
             <button className="rail-button" aria-label="Open your satchel" aria-haspopup="dialog" onClick={() => onPanel('inventory')}><Backpack size={21} /></button>
