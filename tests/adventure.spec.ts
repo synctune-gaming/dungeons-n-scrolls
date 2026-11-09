@@ -1,11 +1,11 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect } from '@playwright/test'
 import { SAVE_KEY } from '../src/game/persistence'
-import { beginBattle, enter, test } from './fixtures'
+import { beginBattle, enter, openTools, readSave, test } from './fixtures'
 
 test('shows an original scene with every choice reachable in the first viewport', async ({ page, isMobile }, info) => {
   await enter(page)
-  await expect(page.getByRole('heading', { name: 'The Ashen Woods', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'The forgotten gate', exact: true })).toBeVisible()
   await expect(page.getByRole('img', { name: /original pixel-art woodland path/ })).toBeVisible()
   for (const name of ['Take the trail', 'Enter the gate', 'Search the ruins']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 })
@@ -17,7 +17,7 @@ test('shows an original scene with every choice reachable in the first viewport'
     const tonic = await page.getByRole('button', { name: 'Drink a healing tonic', exact: true }).boundingBox()
     if (!description || !controls || !status || !tonic) throw new Error('The encounter description, status, or controls are missing.')
     expect(description.y + description.height).toBeLessThanOrEqual(controls.y)
-    expect(tonic.y).toBeGreaterThanOrEqual(status.y + status.height)
+    expect(tonic.y + tonic.height).toBeLessThanOrEqual(status.y)
   }
   const dimensions = await page.evaluate(() => ({
     viewport: innerWidth, content: document.documentElement.scrollWidth,
@@ -150,12 +150,15 @@ test('persists the current room and preferences through a reload', async ({ page
   await enter(page)
   await activate(page.getByRole('button', { name: 'Enter the gate', exact: true }))
   await expect(page.getByRole('heading', { name: 'A shape in the dark', exact: true })).toBeVisible()
+  await openTools(page, activate)
   await activate(page.getByRole('button', { name: 'Open settings', exact: true }))
   await activate(page.getByRole('checkbox', { name: /Gesture hints/ }))
   await page.keyboard.press('Escape')
   await page.reload()
   await expect(page.getByRole('heading', { name: 'A shape in the dark', exact: true })).toBeVisible()
-  await expect(page.getByText('Scroll or swipe to explore', { exact: true })).toHaveCount(0)
+  expect((await readSave(page)).settings.hints).toBe(false)
+  await expect(page.getByRole('group', { name: 'Choose your next move' }).locator('button > svg')).toHaveCount(0)
+  await openTools(page, activate)
   await activate(page.getByRole('button', { name: 'Open settings', exact: true }))
   await expect(page.getByRole('checkbox', { name: /Gesture hints/ })).not.toBeChecked()
 })
@@ -184,7 +187,7 @@ test('plays all three floors to victory and preserves the win after restarting',
   await expect(page.getByRole('heading', { name: 'You lived to tell the tale.' })).toBeVisible()
   await activate(page.getByRole('button', { name: 'Try a new adventure', exact: true }))
   await activate(page.getByRole('button', { name: 'Begin a new adventure', exact: true }))
-  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  await activate(page.getByRole('button', { name: /^View journey map/ }))
   await expect(page.getByRole('dialog').getByText('Completed adventures1', { exact: true })).toBeVisible()
   await expect(page.getByRole('dialog').getByText('Best floor3 / 3', { exact: true })).toBeVisible()
 })
@@ -198,10 +201,10 @@ test('reports corrupt storage and still provides a playable new adventure', asyn
 
 test('meets automated accessibility checks in the adventure and inventory', async ({ page, activate }) => {
   await enter(page)
-  const adventure = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
+  const adventure = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
   expect(adventure.violations).toEqual([])
   await activate(page.getByRole('button', { name: 'Open your satchel', exact: true }))
-  const inventory = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
+  const inventory = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
   expect(inventory.violations).toEqual([])
 })
 
@@ -223,7 +226,7 @@ test('keeps future rooms and guardians anonymous until they are discovered', asy
   await enter(page)
   await expect(page.locator('body')).not.toContainText('The Hollow King')
   await expect(page.locator('body')).not.toContainText('Crypt skulk')
-  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  await activate(page.getByRole('button', { name: /^View journey map/ }))
   const map = page.getByRole('dialog', { name: 'A road into the unknown' })
   await expect(map).not.toContainText('The Hollow King')
   await expect(map).not.toContainText('The Cinderworks')

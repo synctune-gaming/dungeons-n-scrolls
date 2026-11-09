@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { SetStateAction } from 'react'
 import {
   ArrowLeft, ArrowRight, ArrowUp, Backpack, BookOpen, Check,
-  ChevronRight, Coins, Compass, DoorOpen, Eye, Flame,
+  ChevronRight, Coins, Compass, DoorOpen, Ellipsis, Eye, Flame,
   FlaskConical, Heart, HelpCircle, Map, Moon, Plus, ScrollText, Search,
   Settings as SettingsIcon, Skull, Sparkles, Swords, UserRound, X,
   CircleHelp, WandSparkles,
@@ -12,13 +12,13 @@ import { Modal } from './components/Modal'
 import { SPELL_ICONS } from './components/CombatControls'
 import { Portrait } from './components/Portrait'
 import { RelicList } from './components/CharacterDetails'
-import { Timeline } from './components/Timeline'
+import { EncounterHistory, Timeline } from './components/Timeline'
 import { HeroProfilePage, AdventurerProfilePage } from './components/Profiles'
-import { StoryViewer } from './components/Stories'
+import { StoriesStrip, StoryViewer } from './components/Stories'
 import { ExplorePage, DestinationView } from './components/Explore'
 import { GiftChat } from './components/GiftChat'
-import { CLASSES, getDialogue, getRegion, REGIONS, ROOMS, SPELLS } from './game/content'
-import { createRun, gameReducer, getRoom, getRoomPresentation, npcResponseUnavailable, spellUnavailable } from './game/engine'
+import { CLASSES, getDialogue, REGIONS, ROOMS, SPELLS } from './game/content'
+import { createRun, experienceTarget, gameReducer, getRoom, npcResponseUnavailable, spellUnavailable } from './game/engine'
 import { loadSave, writeSave } from './game/persistence'
 import { CLASS_IDS, NPC_ROOM_IDS, SPELL_IDS } from './game/types'
 import type { ClassId, Direction, GameAction, GameState, RoomKind, Rune, SavedGame } from './game/types'
@@ -28,7 +28,7 @@ import type { AdventurerId, SocialAction } from './social/types'
 import { ADVENTURERS } from './social/content'
 import { socialReducer } from './social/engine'
 
-type Panel = 'inventory' | 'journal' | 'map' | 'help' | 'settings' | 'restart' | 'spells' | null
+type Panel = 'inventory' | 'journal' | 'map' | 'help' | 'settings' | 'restart' | 'spells' | 'tools' | null
 type MainScreen = 'timeline' | 'search' | 'profile'
 type Screen = { type: 'timeline' } | { type: 'search' } | { type: 'profile' }
   | { type: 'adventurer' | 'chat'; id: AdventurerId; origin: MainScreen }
@@ -43,15 +43,6 @@ const KIND_ICONS: Record<RoomKind, LucideIcon> = {
   shop: Coins, shrine: Sparkles, boss: Skull,
 }
 const RUNE_ICONS: Record<Rune, LucideIcon> = { moon: Moon, flame: Flame, eye: Eye }
-const ADVICE: Record<RoomKind, string> = {
-  passage: 'Every path has a story. Some have teeth.',
-  combat: 'Read the next move. A well-timed ward can be worth more than a sharp blade.',
-  npc: 'Not every encounter needs a blade. Try a conversation.',
-  treasure: 'Dexterity 8 opens locks. Below that, you will need to match the runes.',
-  shop: 'Tonics restore 24 health. Keep one for the boss.',
-  shrine: 'A quiet room can be worth more than a full purse.',
-  boss: 'A guardian has more than one face. Save a little magic for what wakes next.',
-}
 
 function randomSeed() {
   return crypto.getRandomValues(new Uint32Array(1))[0] ?? 1
@@ -68,9 +59,9 @@ function BrandMark({ small = false }: { small?: boolean }) {
   )
 }
 
-function Journey({ game, compact = false }: { game: GameState; compact?: boolean }) {
+function Journey({ game }: { game: GameState }) {
   return (
-    <ol className={`journey ${compact ? 'compact' : ''}`} aria-label="Current floor route">
+    <ol className="journey" aria-label="Current floor route">
       {game.deck.map((id, index) => {
         const room = ROOMS[id]
         const visible = game.discovered.includes(id)
@@ -92,14 +83,14 @@ function Journey({ game, compact = false }: { game: GameState; compact?: boolean
   )
 }
 
-function Journal({ game, compact = false }: { game: GameState; compact?: boolean }) {
-  const entries = [...game.journal].reverse().slice(0, compact ? 3 : 30)
+function Journal({ game }: { game: GameState }) {
+  const entries = [...game.journal].reverse().slice(0, 30)
   return (
-    <ol className={`journal ${compact ? 'compact' : ''}`}>
-      {entries.map((entry, index) => (
+    <ol className="journal">
+      {entries.map((entry) => (
         <li key={entry.id} className={`journal-${entry.tone}`}>
           <span className="journal-marker">{entry.tone === 'good' ? <Sparkles size={13} /> : entry.tone === 'danger' ? <Swords size={13} /> : <ScrollText size={13} />}</span>
-          <div>{!compact && <span className="eyebrow">Entry {entry.id}</span>}<p>{entry.text}</p>{compact && index === 0 && <span className="journal-latest">Your latest step</span>}</div>
+          <div><span className="eyebrow">Entry {entry.id}</span><p>{entry.text}</p></div>
         </li>
       ))}
     </ol>
@@ -134,8 +125,7 @@ export default function App() {
   const game = save.game
   const player = game.player
   const room = getRoom(game)
-  const presentation = getRoomPresentation(game)
-  const region = getRegion(game.floor)
+  const gameplay = screen.type === 'timeline' && !game.visit
   const primaryScreen = screen.type === 'adventurer' || screen.type === 'chat' ? screen.origin : screen.type
   const interactionOpen = panel !== null || game.puzzle !== null || game.dialogue || game.omen !== null || story !== null
   const blocked = interactionOpen || screen.type !== 'timeline' || game.visit !== null || game.status !== 'active' || animating
@@ -148,7 +138,8 @@ export default function App() {
     return () => cancelAnimationFrame(frame)
   }, [screen, game.visit?.destinationId, game.visit?.venueId, game.combat?.result])
 
-  useEffect(() => {
+  // Keep the animation lock in sync with visible controls before paint.
+  useLayoutEffect(() => {
     if (reducedMotion || game.feedback.id === 0 || game.feedback.type === 'info') { setAnimating(false); return }
     setAnimating(true)
     const timer = window.setTimeout(() => setAnimating(false), 450)
@@ -226,7 +217,7 @@ export default function App() {
     act({ type: 'CHOOSE', direction })
   }, [act, blocked])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (blocked) return
     const handleKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
@@ -279,20 +270,19 @@ export default function App() {
     { panel: 'journal', label: 'Journal', icon: BookOpen },
     { panel: 'map', label: 'Map', icon: Map },
   ]
-  const EncounterIcon = presentation.known ? KIND_ICONS[room.kind] : CircleHelp
   const warning = saveError ?? session.error ?? notice
   const npcId = NPC_ROOM_IDS.find((id) => id === room.id)
 
   function navigate(next: Screen) { setPanel(null); setStory(null); setScreen(next) }
   function openProfile(id: AdventurerId) { navigate({ type: 'adventurer', id, origin: primaryScreen }) }
-  function openStory(id: AdventurerId) { storyTrigger.current = dialogTrigger.current; setStory({ id, index: 0 }) }
+  function openStory(id: AdventurerId) { storyTrigger.current = dialogTrigger.current; setPanel(null); setStory({ id, index: 0 }) }
   function restart() { setNextClass(player.classId); setPanel('restart') }
 
   return (
-    <div className="app-shell" onClickCapture={(event) => {
+    <div className={`app-shell ${gameplay ? 'gameplay-shell' : ''}`} onClickCapture={(event) => {
       // Safari does not focus tapped buttons; remember the actual dialog opener.
       const trigger = event.target instanceof Element ? event.target.closest('button') : null
-      if (trigger instanceof HTMLElement) dialogTrigger.current = trigger
+      if (trigger instanceof HTMLElement && !trigger.closest('.tools-modal')) dialogTrigger.current = trigger
     }}>
       <a className="skip-link" href={screen.type === 'timeline' && !game.visit ? '#adventure' : '#social-screen'}>Skip to main content</a>
       <aside className="sidebar">
@@ -357,28 +347,26 @@ export default function App() {
 
         {warning && <div className="notice" role="alert"><span>{warning}</span>{!saveError && <button className="icon-button" aria-label="Dismiss notice" onClick={() => { setNotice(null); setSession((current) => ({ ...current, error: null })) }}><X size={17} /></button>}</div>}
 
-        <div className={`workspace-content ${screen.type !== 'timeline' || game.visit ? 'social-content' : ''}`}>
-          {screen.type === 'timeline' && (game.visit ? <DestinationView game={game} reducedMotion={reducedMotion} onAction={act} /> : <Timeline save={save} blocked={blocked} interactionOpen={interactionOpen} lastDirection={lastDirection} reducedMotion={reducedMotion} saveError={saveError} encounterIcon={EncounterIcon} onChoose={choose} onAction={act} onPanel={setPanel} onRestart={restart} onToggleSound={toggleSound} onStory={openStory} />)}
+        <div className="workspace-content">
+          {screen.type === 'timeline' && (game.visit ? <DestinationView game={game} reducedMotion={reducedMotion} onAction={act} /> : <Timeline save={save} blocked={blocked} interactionOpen={interactionOpen} lastDirection={lastDirection} reducedMotion={reducedMotion} onChoose={choose} onAction={act} onPanel={setPanel} onRestart={restart} />)}
           {screen.type === 'search' && <ExplorePage game={game} social={save.social} onVisit={(destinationId) => act({ type: 'START_VISIT', destinationId })} onProfile={openProfile} onResume={() => navigate({ type: 'timeline' })} />}
           {screen.type === 'profile' && <HeroProfilePage save={save} journal={<Journal game={game} />} onAction={socialAct} onOpenProfile={openProfile} onInventory={() => setPanel('inventory')} onRestart={restart} onSearch={() => navigate({ type: 'search' })} />}
           {screen.type === 'adventurer' && <AdventurerProfilePage social={save.social} id={screen.id} backLabel={`Back to ${screen.origin}`} onBack={() => navigate({ type: screen.origin })} onAction={socialAct} onChat={() => navigate({ ...screen, type: 'chat' })} onStories={() => openStory(screen.id)} />}
           {screen.type === 'chat' && <GiftChat save={save} id={screen.id} onBack={() => navigate({ ...screen, type: 'adventurer' })} onAction={socialAct} />}
-          {screen.type === 'timeline' && !game.visit && <aside className="journey-panel" aria-label="Adventure overview">
-            <header className="panel-heading"><h2>Your journey</h2><span>Chapter {['I', 'II', 'III'][game.floor - 1]}</span></header>
-            <div className="journey-location"><span className="location-icon"><Map size={18} /></span><div><strong>{game.roomIndex === 0 ? 'An uncharted path' : region.dungeon}</strong><span>{game.deck.length} rooms to discover</span></div></div>
-            <Journey game={game} compact />
-            <button className="text-button map-link" onClick={() => setPanel('map')}>View the full map<ArrowRight size={13} /></button>
-            <div className="aside-divider" />
-            <header className="panel-heading notes-heading"><h2>Field notes</h2><BookOpen size={16} /></header>
-            <Journal game={game} compact />
-            <button className="text-button" onClick={() => setPanel('journal')}>Open your journal<ArrowRight size={13} /></button>
-            <div className="advice-card"><ScrollText size={21} strokeWidth={1.2} /><p>{presentation.known ? ADVICE[room.kind] : 'Keep your blade close. The darkness is not empty.'}</p><span>A word to the wanderer</span></div>
-          </aside>}
         </div>
       </div>
 
-      <nav className="mobile-navigation" aria-label="Primary navigation">{PRIMARY_NAV.map((item) => <button key={item.type} aria-current={primaryScreen === item.type ? 'page' : undefined} onClick={() => navigate({ type: item.type })}><item.icon size={20} strokeWidth={1.6} /><span>{item.label}</span></button>)}</nav>
+      <nav className="mobile-navigation" aria-label="Primary navigation">{PRIMARY_NAV.map((item) => <button key={item.type} aria-current={primaryScreen === item.type ? 'page' : undefined} onClick={() => navigate({ type: item.type })}><item.icon size={20} strokeWidth={1.6} /><span>{item.label}</span></button>)}<button aria-haspopup="dialog" onClick={() => setPanel('tools')}><Ellipsis size={20} /><span>More</span></button></nav>
       {story && <StoryViewer id={story.id} index={story.index} social={save.social} reducedMotion={reducedMotion} restoreFocusTo={storyTrigger.current} onIndex={(index) => setStory((current) => current ? { ...current, index } : current)} onClose={() => setStory(null)} onProfile={() => openProfile(story.id)} />}
+
+      {panel === 'tools' && <Modal restoreFocusTo={dialogTrigger.current} title="Adventure tools" eyebrow={`Floor ${game.floor} / Run #${String(game.runNumber).padStart(3, '0')}`} onClose={() => setPanel(null)} className="tools-modal">
+        <div className="tool-stats"><span><Coins size={16} />{player.gold} gold</span><span><Sparkles size={16} />Level {player.level}</span><span>{player.level === 10 ? 'Maximum level' : `${player.xp} / ${experienceTarget(player.level)} XP`}</span></div>
+        <nav className="tool-menu" aria-label="Adventure tools">{nav.map((item) => <button key={item.label} className="nav-item" aria-haspopup="dialog" onClick={() => setPanel(item.panel)}><item.icon size={19} />{item.label}</button>)}<button className="nav-item" aria-label="Open settings" aria-haspopup="dialog" onClick={() => setPanel('settings')}><SettingsIcon size={19} />Settings</button><button className="nav-item" aria-haspopup="dialog" onClick={() => setPanel('help')}><HelpCircle size={19} />How to play</button></nav>
+        <button className="outline-button full-width" onClick={restart}><Plus size={16} />New adventure</button>
+        <StoriesStrip social={save.social} onOpen={openStory} />
+        <EncounterHistory game={game} />
+        <p className="save-status"><span className={saveError ? 'unsaved-dot' : 'saved-dot'} />{saveError ? 'Progress is not saving' : 'Your adventure saves as you go'}</p>
+      </Modal>}
 
       {game.dialogue && screen.type === 'timeline' && <Modal restoreFocusTo={dialogTrigger.current} title={room.name} eyebrow="A voice beside the fire" onClose={() => act({ type: 'CLOSE_DIALOGUE' })} className="dialogue-modal">
         <div className="dialogue-portrait"><Portrait large /><Flame size={19} /></div>
@@ -451,7 +439,7 @@ export default function App() {
 
       {panel === 'settings' && <Modal restoreFocusTo={dialogTrigger.current} title="Make yourself at home" eyebrow="Settings" onClose={() => setPanel(null)}>
         <label className="setting-row"><span><strong>Sound effects</strong><small>Quiet, retro tones for your choices.</small></span><input type="checkbox" checked={save.settings.sound} onChange={toggleSound} /></label>
-        <label className="setting-row"><span><strong>Gesture hints</strong><small>Show the scrolling and keyboard guide.</small></span><input type="checkbox" checked={save.settings.hints} onChange={(event) => { const hints = event.currentTarget.checked; setSave((current) => ({ ...current, settings: { ...current.settings, hints } })) }} /></label>
+        <label className="setting-row"><span><strong>Gesture hints</strong><small>Show direction arrows on encounter choices.</small></span><input type="checkbox" checked={save.settings.hints} onChange={(event) => { const hints = event.currentTarget.checked; setSave((current) => ({ ...current, settings: { ...current.settings, hints } })) }} /></label>
         <p className="modal-footnote">Atmosphere, creature movement, and spell effects follow your device's reduced-motion setting. Background animation pauses in hidden tabs and behind dialogs. Progress stays in this browser.</p>
         <button className="outline-button full-width" onClick={() => { setNextClass(player.classId); setPanel('restart') }}><Plus size={16} />Start a new adventure</button>
       </Modal>}

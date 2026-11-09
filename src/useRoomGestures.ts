@@ -13,6 +13,7 @@ export function useRoomGestures(onDirection: (direction: Direction) => void, ena
     if (!target) return
     const handleWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.metaKey) return
+      if (event.target instanceof Element && event.target.closest('button, a, input')) return
       event.preventDefault()
       const now = performance.now()
       const current = wheel.current

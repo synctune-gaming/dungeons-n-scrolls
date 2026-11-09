@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite, usually **http://localhost:5173**. Use **Timeline**, **Search**, and **Profile** to navigate. Swipe or scroll on the active encounter to make a choice; buttons and arrow keys work too.
+Open the local URL printed by Vite, usually **http://localhost:5173**. The live dungeon fills the screen, with compact health/mana and encounter controls. Use **Timeline**, **Search**, and **Profile** to navigate, and **More** for stories, field notes, and settings. Swipe or scroll on the active encounter to make a choice; buttons and arrow keys work too.
 
 ## Docs
 

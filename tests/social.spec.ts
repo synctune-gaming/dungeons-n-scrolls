@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { enter, loadGame, readSave, test } from './fixtures'
+import { enter, loadGame, openTools, readSave, test } from './fixtures'
 import { createRun } from '../src/game/engine'
 
 async function navigate(page: Page, activate: (target: Locator) => Promise<void>, name: 'Timeline' | 'Search' | 'Profile') {
@@ -48,6 +48,7 @@ test('follows fictional adventurers, prioritizes stories, and links back to thei
   await activate(page.getByRole('button', { name: 'Follow', exact: true }))
   await expect(page.getByRole('button', { name: 'Unfollow', exact: true })).toBeVisible()
   await navigate(page, activate, 'Timeline')
+  await openTools(page, activate)
   const stories = page.getByRole('region', { name: 'Fictional adventurer stories' })
   await expect(stories.getByRole('button').first()).toHaveAccessibleName('Open Starling Vale stories')
   await activate(stories.getByRole('button', { name: 'Open Starling Vale stories' }))
@@ -88,11 +89,12 @@ test('keeps discovery, typing, chat, and stories from consuming an unfinished fi
   expect(after.game).toEqual(before.game)
   await navigate(page, activate, 'Timeline')
   await expect(page.getByRole('progressbar', { name: 'Enemy health', exact: true })).toHaveAttribute('value', String(before.game.combat?.health))
+  await openTools(page, activate)
   await activate(page.getByRole('button', { name: 'Open Mosskeeper stories' }))
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('Escape')
   expect((await readSave(page)).game).toEqual(before.game)
-  await expect(page.getByRole('button', { name: 'Open Mosskeeper stories' })).toBeFocused()
+  await expect(page.getByRole('button', { name: 'More', exact: true })).toBeFocused()
 })
 
 test('visits playable cities and NPCs after five rooms and preserves the consumed gate', async ({ page, activate }) => {
@@ -175,6 +177,8 @@ test('keeps all new surfaces accessible and within a phone viewport', async ({ p
 test('keeps stories, gameplay, and side-trip controls accessible', async ({ page, activate }) => {
   await enter(page, 'moon-well', { health: 50, mana: 10 })
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+  await openTools(page, activate)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
   await activate(page.getByRole('button', { name: 'Open Mosskeeper stories', exact: true }))
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
   await page.keyboard.press('Escape')
@@ -206,28 +210,26 @@ test('keeps return gifts capped across conversations and expires them on a new r
   expect((await readSave(page)).game.giftClaims).toEqual([])
 })
 
-test('reads past encounters with native scrolling and keys without playing a hidden room', async ({ page }) => {
+test('reads past encounters with native scrolling and keys without playing a hidden room', async ({ page, activate }) => {
   await enter(page, 'ashen-gate', { dexterity: 100 })
-  for (const key of ['ArrowUp', 'ArrowLeft', 'ArrowUp']) {
+  for (const [index, key] of ['ArrowUp', 'ArrowLeft', 'ArrowUp'].entries()) {
     await expect(page.getByRole('group', { name: 'Choose your next move' }).getByRole('button').first()).toBeEnabled()
     await page.getByRole('main').getByRole('heading', { level: 2 }).first().focus()
     await page.keyboard.press(key)
+    await expect.poll(async () => (await readSave(page)).game.roomIndex).toBe(index + 1)
   }
-  await expect(page.getByRole('region', { name: 'Past encounters' }).getByRole('article')).toHaveCount(3)
   await expect(page.getByRole('group', { name: 'Choose your next move' }).getByRole('button').first()).toBeEnabled()
   const before = await readSave(page)
+  await openTools(page, activate)
+  const tools = page.getByRole('dialog', { name: 'Adventure tools', exact: true })
+  await expect(tools.getByRole('region', { name: 'Past encounters' }).getByRole('article')).toHaveCount(3)
   await page.getByRole('region', { name: 'Past encounters' }).getByRole('article').last().scrollIntoViewIfNeeded()
-  await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight)
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-  })
-  expect(await page.evaluate(() => ({
-    bodyFocused: document.activeElement === document.body,
-    currentRoomOffscreen: (document.getElementById('room-title')?.getBoundingClientRect().bottom ?? 0) < 0,
-  }))).toEqual({ bodyFocused: true, currentRoomOffscreen: true })
+  expect(await tools.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
   await page.keyboard.press('ArrowUp')
   await page.keyboard.press('p')
   expect((await readSave(page)).game).toEqual(before.game)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'More', exact: true })).toBeFocused()
 })
 
 test('explains and blocks using inventory supplies during a paused side trip', async ({ page, activate }) => {
@@ -249,7 +251,7 @@ test('starts a fresh twelve-room adventure with the guardian at the end', async 
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   expect((await readSave(page)).game.deck).toHaveLength(12)
-  await activate(page.getByRole('button', { name: 'View journey map', exact: true }))
+  await activate(page.getByRole('button', { name: /^View journey map/ }))
   const map = page.getByRole('dialog', { name: 'A road into the unknown' })
   await expect(map.getByRole('list', { name: 'Current floor route' }).getByRole('listitem')).toHaveCount(12)
   await page.keyboard.press('Escape')

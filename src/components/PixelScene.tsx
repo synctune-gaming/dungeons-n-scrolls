@@ -6,6 +6,15 @@ const HEIGHT = 300
 type Point = [number, number]
 type Context = CanvasRenderingContext2D
 
+function sceneCamera(height: number) {
+  const scale = Math.max(1, height / HEIGHT)
+  const x = (WIDTH - WIDTH * scale) / 2
+  return {
+    scale, x, y: (height - HEIGHT * scale) / 2,
+    torchXs: [Math.max(43, (43 - x) / scale), Math.min(275, (275 - x) / scale)],
+  }
+}
+
 const PALETTES = [
   { sky: '#343037', stone: '#56515c', shadow: '#27252e', moss: '#444c3b', light: '#d4a85b', cloth: '#696447' },
   { sky: '#41282b', stone: '#63504d', shadow: '#2e252c', moss: '#694737', light: '#e8a259', cloth: '#806044' },
@@ -63,7 +72,7 @@ function torch(context: Context, x: number, y: number, size = 1) {
   context.restore()
 }
 
-function dungeon(context: Context, palette: Palette, seed: number) {
+function dungeon(context: Context, palette: Palette, seed: number, torchXs: readonly number[]) {
   context.fillStyle = '#111319'
   context.fillRect(0, 0, WIDTH, HEIGHT)
   polygon(context, [[0, 0], [320, 0], [210, 108], [110, 108]], palette.shadow)
@@ -119,8 +128,7 @@ function dungeon(context: Context, palette: Palette, seed: number) {
     context.fillStyle = '#262631'
     context.fillRect(x - 5, y, 11, 2)
   }
-  torch(context, 43, 131, 1.1)
-  torch(context, 275, 131, 1.1)
+  for (const x of torchXs) torch(context, x, 131, 1.1)
   glow(context, 160, 225, 80, '#b8996630')
 }
 
@@ -363,11 +371,13 @@ function dither(context: Context, seed: number, height: number) {
 function backdrop(context: Context, room: Room, floor: number, seed: number, height: number) {
   const palette = PALETTES[floor - 1]
   if (!palette) throw new Error(`No artwork palette exists for floor ${floor}.`)
+  const camera = sceneCamera(height)
   context.imageSmoothingEnabled = false
   context.save()
-  context.scale(1, height / HEIGHT)
+  context.translate(camera.x, camera.y)
+  context.scale(camera.scale, camera.scale)
   if (room.zone === 'overworld') overworld(context, palette, seed, floor)
-  else dungeon(context, palette, seed)
+  else dungeon(context, palette, seed, camera.torchXs)
   context.restore()
   dither(context, seed, height)
 }
@@ -437,23 +447,27 @@ function spellEffect(context: Context, type: EffectType, progress: number, heigh
   context.restore()
 }
 
-function combatConditions(context: Context, combat: Combat | null, height: number, time: number) {
+function combatConditions(context: Context, combat: Combat | null, height: number, time: number, actorScale: number, enemyBase: number) {
   if (!combat || combat.result !== 'fighting') return
-  const shift = (height - HEIGHT) * 0.66
+  context.save()
+  context.translate(160, enemyBase)
+  context.scale(actorScale, actorScale)
+  context.translate(-160, -177)
   if (combat.frozenTurns > 0) {
-    glow(context, 160, 165 + shift, 48, '#a8cedb25')
+    glow(context, 160, 165, 48, '#a8cedb25')
     for (const [x, y] of [[125, 156], [143, 194], [184, 150], [192, 204]] as const) {
-      polygon(context, [[x - 7, y + shift + 15], [x, y + shift - 12], [x + 6, y + shift + 15]], '#91b2c4')
-      line(context, [[x, y + shift - 10], [x + 3, y + shift + 12]], '#c0dce1')
+      polygon(context, [[x - 7, y + 15], [x, y - 12], [x + 6, y + 15]], '#91b2c4')
+      line(context, [[x, y - 10], [x + 3, y + 12]], '#c0dce1')
     }
   }
   if (combat.burnTurns > 0) {
     for (let index = 0; index < 12; index += 1) {
       context.fillStyle = index % 2 ? '#e5ad70' : '#bd784e'
-      const y = 219 + shift - (time * 19 + index * 9) % 67
+      const y = 219 - (time * 19 + index * 9) % 67
       context.fillRect(131 + noise(index, 2, 8) * 58, y, 2, 3)
     }
   }
+  context.restore()
   if (combat.ward > 0) {
     const points: Point[] = []
     for (let index = 0; index <= 24; index += 1) {
@@ -469,6 +483,7 @@ function renderFrame(
   context: Context, background: HTMLCanvasElement, room: Room, floor: number,
   seed: number, height: number, known: boolean, combat: Combat | null,
   feedback: Feedback | null, time: number, progress: number, reduced: boolean,
+  foregroundTop: number, foregroundHeight: number,
 ) {
   const palette = PALETTES[floor - 1]
   if (!palette) throw new Error(`No artwork palette exists for floor ${floor}.`)
@@ -478,26 +493,33 @@ function renderFrame(
     ? Math.sin(progress * 22) * (1 - progress) * 2 : 0
   context.translate(shake, 0)
   context.drawImage(background, 0, 0)
+  const camera = sceneCamera(height)
   context.save()
-  context.scale(1, height / HEIGHT)
+  context.translate(camera.x, camera.y)
+  context.scale(camera.scale, camera.scale)
   const flicker = reduced ? 0 : Math.sin(time * 2.3) * 0.035
   if (room.zone === 'dungeon') {
-    torch(context, 43, 131, 1.1 + flicker)
-    torch(context, 275, 131, 1.1 - flicker)
+    for (const [index, x] of camera.torchXs.entries()) torch(context, x, 131, 1.1 + (index === 0 ? flicker : -flicker))
   } else {
     torch(context, 120, 152, 0.65 + flicker)
     torch(context, 201, 152, 0.65 - flicker)
   }
   context.restore()
   context.save()
-  context.translate(0, (height - HEIGHT) * 0.66)
+  context.beginPath()
+  context.rect(0, foregroundTop, WIDTH, foregroundHeight)
+  context.clip()
+  const framed = foregroundHeight < height
+  const actorScale = Math.min(1, Math.max(0.6, (foregroundHeight - 45) / 160), framed ? foregroundHeight / 180 : 1)
+  const enemyBase = foregroundHeight * (framed ? 0.72 : 0.6)
+  context.save()
+  context.translate(0, foregroundTop + (foregroundHeight - HEIGHT) * 0.66)
   if (!reduced) context.translate(Math.sin(time * 1.3) * 0.8, Math.cos(time * 1.8) * 0.8)
   if (room.kind === 'treasure') chest(context, palette)
   if (room.kind === 'npc' || room.kind === 'shop') pilgrim(context, palette, room.kind === 'shop')
   if (room.kind === 'shrine') shrine(context, palette)
   if (room.kind === 'combat' || room.kind === 'boss') {
-    const actorScale = Math.min(1, Math.max(0.6, (height - 45) / 160))
-    context.translate(0, height * 0.6 - (177 + (height - HEIGHT) * 0.66))
+    context.translate(0, enemyBase - (177 + (foregroundHeight - HEIGHT) * 0.66))
     context.translate(160, 177)
     context.scale(actorScale, actorScale)
     context.translate(-160, -177)
@@ -512,7 +534,10 @@ function renderFrame(
     }
   }
   context.restore()
-  combatConditions(context, combat, height, reduced ? 0 : time)
+  context.save()
+  context.translate(0, foregroundTop)
+  combatConditions(context, combat, foregroundHeight, reduced ? 0 : time, actorScale, enemyBase)
+  context.restore()
   if (!reduced) {
     for (let index = 0; index < 28; index += 1) {
       const x = (noise(index, 2, seed) * WIDTH + Math.sin(time * 0.3 + index) * 5 + WIDTH) % WIDTH
@@ -526,13 +551,13 @@ function renderFrame(
     context.globalAlpha = 0.2
     for (let index = 0; index < 9; index += 1) {
       const x = -30 + (index * 49 + (reduced ? 0 : time * 7)) % 370
-      glow(context, x, height * 0.58 + Math.sin(index) * 20, 58, '#74788390')
+      glow(context, x, foregroundTop + foregroundHeight * 0.58 + Math.sin(index) * 20, 58, '#74788390')
     }
     context.restore()
   }
   context.save()
-  const weaponScale = Math.min(1, height / 180)
-  context.translate(280, height)
+  const weaponScale = Math.min(1, foregroundHeight / 180)
+  context.translate(280, foregroundTop + foregroundHeight)
   context.scale(weaponScale, weaponScale)
   context.translate(-280, -HEIGHT)
   const actionType = feedback?.actionType === 'info' ? feedback.type : feedback?.actionType
@@ -551,14 +576,16 @@ function renderFrame(
   sword(context)
   context.restore()
   if (!reduced && feedback && progress < 1) {
-    if (actionType) spellEffect(context, actionType, progress, height)
-    if (feedback.type !== actionType) spellEffect(context, feedback.type, progress, height)
+    context.save()
+    context.translate(0, foregroundTop)
+    if (actionType) spellEffect(context, actionType, progress, foregroundHeight)
+    if (feedback.type !== actionType) spellEffect(context, feedback.type, progress, foregroundHeight)
     context.save()
     context.globalAlpha = Math.min(1, (1 - progress) * 3)
     context.font = '12px "DM Mono", monospace'
     context.textAlign = 'center'
     if (feedback.enemyDamage > 0) {
-      const y = height * 0.32 - progress * 20
+      const y = foregroundHeight * 0.32 - progress * 20
       context.fillStyle = '#17171d'
       context.fillText(`-${feedback.enemyDamage}`, 161, y + 1)
       context.fillStyle = '#f1d29e'
@@ -566,14 +593,16 @@ function renderFrame(
     }
     if (feedback.healing > 0 || feedback.playerDamage > 0) {
       context.fillStyle = feedback.healing > 0 ? '#c6d7b2' : '#e5a497'
-      context.fillText(`${feedback.healing > 0 ? '+' : '-'}${feedback.healing || feedback.playerDamage} HP`, 63, Math.max(28, height - 58) - progress * 16)
+      context.fillText(`${feedback.healing > 0 ? '+' : '-'}${feedback.healing || feedback.playerDamage} HP`, 63, Math.max(28, foregroundHeight - 58) - progress * 16)
     }
+    context.restore()
     context.restore()
   }
   context.restore()
+  context.restore()
 }
 
-export function PixelScene({ room, floor, seed, known = true, combat = null, feedback = null, reducedMotion = false, paused = false }: {
+export function PixelScene({ room, floor, seed, known = true, combat = null, feedback = null, reducedMotion = false, paused = false, foregroundInsets }: {
   room: Room
   floor: number
   seed: number
@@ -582,18 +611,19 @@ export function PixelScene({ room, floor, seed, known = true, combat = null, fee
   feedback?: Feedback | null
   reducedMotion?: boolean
   paused?: boolean
+  foregroundInsets?: { top: number; bottom: number }
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const live = useRef({ known, combat, feedback })
+  const live = useRef({ known, combat, feedback, foregroundInsets })
   const effect = useRef<{ feedback: Feedback; started: number } | null>(null)
   const redraw = useRef<(() => void) | null>(null)
   useEffect(() => {
     if (feedback && feedback.id !== live.current.feedback?.id) {
       effect.current = { feedback, started: performance.now() }
     }
-    live.current = { known, combat, feedback }
+    live.current = { known, combat, feedback, foregroundInsets }
     if (reducedMotion || paused) redraw.current?.()
-  }, [known, combat, feedback, reducedMotion, paused])
+  }, [known, combat, feedback, reducedMotion, paused, foregroundInsets])
   useEffect(() => {
     const element = canvas.current
     const context = element?.getContext('2d')
@@ -604,6 +634,7 @@ export function PixelScene({ room, floor, seed, known = true, combat = null, fee
     const backgroundContext = background.getContext('2d')
     if (!backgroundContext) throw new Error('The browser could not cache the dungeon background.')
     let height = 0
+    let pixelScale = 1
     let animation = 0
     let lastFrame = 0
     const still = reducedMotion || paused
@@ -611,11 +642,14 @@ export function PixelScene({ room, floor, seed, known = true, combat = null, fee
       const current = live.current
       const active = effect.current
       const progress = active ? Math.min(1, (now - active.started) / 750) : 1
-      renderFrame(context, background, room, floor, seed, height, current.known, current.combat, active?.feedback ?? null, now / 1000, progress, still)
+      const top = (current.foregroundInsets?.top ?? 0) * pixelScale
+      const foregroundHeight = Math.max(1, height - top - (current.foregroundInsets?.bottom ?? 0) * pixelScale)
+      renderFrame(context, background, room, floor, seed, height, current.known, current.combat, active?.feedback ?? null, now / 1000, progress, still, top, foregroundHeight)
     }
     const resize = () => {
       const bounds = element.getBoundingClientRect()
-      const nextHeight = Math.max(100, Math.round(WIDTH * bounds.height / Math.max(1, bounds.width)))
+      pixelScale = WIDTH / Math.max(1, bounds.width)
+      const nextHeight = Math.max(1, Math.round(pixelScale * bounds.height))
       if (height !== nextHeight) {
         height = nextHeight
         element.height = height

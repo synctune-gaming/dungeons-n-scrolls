@@ -13,7 +13,9 @@ Your goal is to survive three regions and defeat their guardians. New floors hav
 | P, the tonic icon, or Drink in the satchel | Use a healing tonic |
 | A, Refill, or Drink in the satchel | Use an aether vial |
 
-The buttons for the current room always show the exact action, stat, and cost for that gesture. On phones they stay above the bottom navigation. Glowing scene markers open chests, start conversations, reveal enemies, or inspect inscriptions. A downward swipe does not backtrack. One continuous mouse-wheel burst on the encounter makes one choice, even during an animation, so trackpad inertia cannot consume your run.
+The live encounter fills the available viewport, including on small phones and after rotation. Only health, mana, the floor/room counter, and quick supply tools sit above the scene. Room copy and choices overlay the bottom; combat adds enemy health, its next intention, and spells only while needed. Branding, stories, gold/XP, and read-only history do not push the dungeon down a page.
+
+The buttons for the current room pair a direction arrow with the action and its outcome or cost, without spelling out swipe instructions. They stay above the bottom navigation, clear of phone safe areas, with at least 44px touch targets. Gesture hints toggle the arrows; action labels and outcomes always remain visible. Glowing scene markers open chests, start conversations, reveal enemies, or inspect inscriptions. A downward swipe does not backtrack. One continuous mouse-wheel burst on the encounter makes one choice, even during an animation, so trackpad inertia cannot consume your run. Scrolling over a button does not make a dungeon choice.
 
 Scrolling stories, past encounters, search, profiles, and chat does not make dungeon choices. Keyboard adventure shortcuts are active only on the timeline's live encounter; entering a name or searching never attacks a monster.
 
@@ -79,13 +81,13 @@ Wells restore health and mana. You can also sacrifice 5 health for strength, or 
 
 ## Profiles, following, and stories
 
-**Timeline**, **Search**, and **Profile** remain available in the sidebar or phone bottom navigation without resetting the run. Past timeline encounters are read-only: they cannot replay fights or rewards, and passed-unseen monsters remain unidentified.
+**Timeline**, **Search**, and **Profile** remain available in the bottom navigation during gameplay without resetting the run. **More** opens adventure tools, gold/XP, stories, settings, and past encounters. Past encounters are read-only: they cannot replay fights or rewards, and passed-unseen monsters remain unidentified. Search, profiles, chat, and side trips keep their normal scrollable layouts.
 
 Profile shows your current class, stats, equipment, and journal. Edit your adventurer's name using 1-32 characters and choose a pixel-portrait style and color palette. These are cosmetic choices; changing class still starts a new adventure.
 
 Search also lists six fictional adventurers. Open a profile to see their character and journeys, Follow or Unfollow them, or open their chat. Profile keeps your followed-player list; followed adventurers appear first in the timeline stories strip. Following survives reloads and new adventures.
 
-Tap a portrait to open that adventurer's stories. Previous, Next, and Left/Right keys advance the manual viewer; Escape or Close leaves it. Stories link back to the correct profile. Every profile and story is explicitly fictional, not live multiplayer activity.
+Open **More** and tap a portrait to open that adventurer's stories. Previous, Next, and Left/Right keys advance the manual viewer; Escape or Close leaves it and returns focus to More. Stories also open from adventurer profiles, and link back to the correct profile. Every profile and story is explicitly fictional, not live multiplayer activity.
 
 ## Search and playable side trips
 
@@ -123,6 +125,6 @@ At zero health, the run ends. Defeating the Pale Warden and taking the last pass
 
 Profile, inventory, grimoire, map, journal, sound, and gesture hints are available from the navigation or mobile controls. Dialogs support Escape and return focus to their opener. Animated torches, creature movement, sword strikes, and spell effects follow your device's reduced-motion preference. Motion pauses behind dialogs and in hidden tabs.
 
-On phones, the scene-side tools are tonics, satchel, and grimoire. Open Map from the encounter header, and use Settings for sound and gesture hints; these avoid duplicating controls over the scene or hero stats.
+The compact scene-top tools are tonics, satchel, and grimoire. Tap the floor/room counter to open Map, or open **More** for all adventure tools. Use **More > Settings** for sound and gesture hints. Extra tools pause encounter input; closing a tool opened through More returns focus to More.
 
 Progress, unfinished combat and visits, social history, and preferences stay in local browser storage. Version-1 and version-2 adventures migrate without losing their current floor route, health, inventory, encounter, or records; the old save keys remain as backups. Older saved floors keep their original layout; newly generated floors use twelve rooms. There is no account, tracking, server, or cloud synchronization. Clearing browser storage removes the save. If storage is blocked or damaged, the game explains the problem instead of claiming to save.
